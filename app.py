@@ -7,7 +7,7 @@ import uuid
 from data import build_graph, generate_fixed_trains
 from accident_manager import EmergencyEvent, AccidentManager
 from simulation import Simulator
-from visualization import plot_interactive
+from visualization import plot_track_timeline, plot_gantt_chart, plot_train_timeline
 
 # Build infrastructure + trains
 NUM_TRACKS = 5
@@ -50,7 +50,9 @@ app.layout = dbc.Container([
         dbc.Col(dbc.Input(id="acc-duration", placeholder="Duration slots (minutes)", type="number", min=1, max=120, value=6), width=3),
         dbc.Col(dbc.Button("Trigger Accident ⚠", id="trigger-acc", color="danger"), width=3)
     ], className="mb-2"),
-    dcc.Graph(id="sim-graph"),
+    dcc.Graph(id="track-timeline-graph"),
+    dcc.Graph(id="timeline-graph"),
+    dcc.Graph(id="gantt-graph"),
     dcc.Interval(id="interval", interval=1000, n_intervals=0, disabled=True),
     html.Div(id="sim-status", style={"marginTop": "10px"}),
 ], fluid=True)
@@ -68,9 +70,13 @@ def run_pause(run_clicks, pause_clicks, is_disabled):
         return True
     return is_disabled
 
+
 # Callback: step, interval tick, trigger accident, reset
+
 @app.callback(
-    Output("sim-graph", "figure"),
+    Output("track-timeline-graph", "figure"),
+    Output("timeline-graph", "figure"),
+    Output("gantt-graph", "figure"),
     Output("sim-status", "children"),
     Input("step-btn", "n_clicks"),
     Input("interval", "n_intervals"),
@@ -106,8 +112,10 @@ def control(step_clicks, n_intervals, trigger_clicks, reset_clicks, acc_track, a
         sim.step_slot()
         status = f"Advanced to slot {sim.current_slot}"
 
-    fig = plot_interactive(sim.state, trains, acc_mgr, G, PLATFORM, sim.current_slot, kpis=sim.compute_kpis())
-    return fig, status
+    track_fig = plot_track_timeline(sim.state, trains)
+    timeline_fig = plot_train_timeline(sim.state, trains)
+    gantt_fig = plot_gantt_chart(sim.state, trains)
+    return track_fig, timeline_fig, gantt_fig, status
 
 if __name__ == "__main__":
     app.run(debug=True)

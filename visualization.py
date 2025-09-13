@@ -1,3 +1,142 @@
+def plot_track_timeline(state, trains):
+    """
+    Plots which train is on which track as a function of time (slot).
+    Y-axis: Track index (with Platform as -1)
+    X-axis: Time (slot)
+    """
+    import pandas as pd
+    import plotly.graph_objects as go
+    df = build_records_from_state(state)
+    if df.empty:
+        fig = go.Figure(); fig.update_layout(title="No track timeline data"); return fig
+    trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+    palette = [
+        "#E6194B", "#3CB44B", "#FFE119", "#4363D8", "#F58231",
+        "#911EB4", "#46F0F0", "#F032E6", "#BCF60C", "#17BECF"
+    ]
+    color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
+    fig = go.Figure()
+    for i, tid in enumerate(trains_list):
+        sub = df[df["train"] == tid]
+        xs, ys, hover = [], [], []
+        for _, row in sub.iterrows():
+            slot = row["slot"]
+            node = row["node"]
+            if node is None:
+                y = None
+            elif isinstance(node, tuple) and node[0] == "Platform":
+                y = -1  # Platform below tracks
+            elif isinstance(node, tuple):
+                y = node[0]  # Track index
+            else:
+                y = None
+            xs.append(slot)
+            ys.append(y)
+            hover.append(f"{tid}<br>slot={slot}<br>track={y}")
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode="lines+markers", line=dict(color=color_map[tid], width=3),
+            marker=dict(size=10, color=color_map[tid]),
+            name=f"{tid}", hoverinfo="text", hovertext=hover, showlegend=True
+        ))
+    fig.update_layout(
+        title="Track Occupancy vs Time (slot)",
+        xaxis_title="Time (slot)",
+        yaxis=dict(
+            tickmode="array",
+            tickvals=[-1,0,1,2,3,4],
+            ticktext=["Platform", "Track0", "Track1", "Track2", "Track3", "Track4"],
+            range=[-1.5, 4.5],
+            title="Track"
+        ),
+        height=400, width=1100, margin=dict(r=40), legend=dict(orientation="h", y=-0.2)
+    )
+    fig.update_xaxes(dtick=1)
+    fig.update_yaxes(dtick=1)
+    return fig
+
+def plot_gantt_chart(state, trains):
+    """
+    Plots a Gantt chart of each train's journey: bar from start to finish slot.
+    """
+    import pandas as pd
+    import plotly.express as px
+    df = build_records_from_state(state)
+    if df.empty:
+        fig = px.timeline(); fig.update_layout(title="No Gantt data"); return fig
+    gantt_data = []
+    for tid in df["train"].unique():
+        sub = df[df["train"] == tid]
+        start_slot = sub["slot"].min()
+        end_slot = sub["slot"].max()
+        gantt_data.append({
+            "Train": tid,
+            "Start": start_slot,
+            "Finish": end_slot,
+            "Type": [t.type for t in trains if t.id == tid][0]
+        })
+    gantt_df = pd.DataFrame(gantt_data)
+    fig = px.timeline(
+        gantt_df, x_start="Start", x_end="Finish", y="Train", color="Type",
+        title="Train Journey Gantt Chart"
+    )
+    fig.update_yaxes(autorange="reversed")
+    fig.update_layout(height=400, width=1100, margin=dict(r=40))
+    return fig
+def plot_train_timeline(state, trains):
+    """
+    Plots each train's position (section/platform) as a function of time (slot).
+    Y-axis: Section (Platform = -0.5, Sec1 = 0, ...)
+    X-axis: Time (slot)
+    """
+    import pandas as pd
+    import plotly.graph_objects as go
+    df = build_records_from_state(state)
+    if df.empty:
+        fig = go.Figure(); fig.update_layout(title="No timeline data"); return fig
+    trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+    palette = [
+        "#E6194B", "#3CB44B", "#FFE119", "#4363D8", "#F58231",
+        "#911EB4", "#46F0F0", "#F032E6", "#BCF60C", "#17BECF"
+    ]
+    color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
+    fig = go.Figure()
+    for i, tid in enumerate(trains_list):
+        sub = df[df["train"] == tid]
+        xs, ys, hover = [], [], []
+        for _, row in sub.iterrows():
+            slot = row["slot"]
+            node = row["node"]
+            if node is None:
+                y = None
+            elif isinstance(node, tuple) and node[0] == "Platform":
+                y = -0.5
+            elif isinstance(node, tuple):
+                y = node[1]
+            else:
+                y = None
+            xs.append(slot)
+            ys.append(y)
+            hover.append(f"{tid}<br>slot={slot}<br>pos={node}")
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode="lines+markers", line=dict(color=color_map[tid], width=3),
+            marker=dict(size=10, color=color_map[tid]),
+            name=f"{tid}", hoverinfo="text", hovertext=hover, showlegend=True
+        ))
+    fig.update_layout(
+        title="Train Position vs Time (slot)",
+        xaxis_title="Time (slot)",
+        yaxis=dict(
+            tickmode="array",
+            tickvals=[-0.5,0,1,2,3],
+            ticktext=["Platform", "Sec1", "Sec2", "Sec3", "Sec4"],
+            range=[-1, 3.5],
+            title="Section"
+        ),
+        height=400, width=1100, margin=dict(r=40), legend=dict(orientation="h", y=-0.2)
+    )
+    fig.update_xaxes(dtick=1)
+    fig.update_yaxes(dtick=1)
+    return fig
 # visualization.py
 import pandas as pd
 import plotly.graph_objects as go
