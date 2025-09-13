@@ -221,30 +221,32 @@ class Simulator:
         for t in self.trains:
             st = self.state[t.id]
             info = st["info"]
+            was_blocked = st.get("was_blocked", False)
             if st["status"] == "not_arrived":
                 if cur >= int(info.sched_arrival):
                     if st["planned_slots"] and st["planned_slots"][0] == cur:
-                        # Only allow entry if not blocked
                         node = st["planned_path"][0]
                         if (node, cur) in blocked:
                             st["waiting_s"] += TIME_STEP_S
                             st["log"].append((cur, None, node, "wait_blocked_entry"))
+                            st["was_blocked"] = True
                         else:
                             st["pos"] = node
                             st["slot"] = cur
                             st["status"] = "running"
                             st["log"].append((cur, None, st["pos"], "enter"))
+                            if st.get("was_blocked", False):
+                                st["log"].append((cur, None, st["pos"], "resume"))
+                                st["was_blocked"] = False
             elif st["status"] == "running":
                 if not st["planned_slots"]:
                     if not self.attempt_runtime_plan(t.id):
                         st["waiting_s"] += TIME_STEP_S
                         st["log"].append((cur, st["pos"], st["pos"], "wait_noplan"))
                     continue
-                # find current index
                 try:
                     idx = st["planned_slots"].index(st["slot"])
                 except ValueError:
-                    # sync to next planned slot >= current
                     idx = None
                     for ii, s in enumerate(st["planned_slots"]):
                         if s >= cur:
@@ -254,14 +256,19 @@ class Simulator:
                             st["waiting_s"] += TIME_STEP_S
                             st["log"].append((cur, st["pos"], st["pos"], "wait_outsync"))
                         continue
-                # attempt move to next
                 if idx + 1 < len(st["planned_slots"]):
                     next_slot = st["planned_slots"][idx+1]
                     next_node = st["planned_path"][idx+1]
+                    # Enforce: if a section is blocked at next_slot, train must wait at least one slot before entering
+                    # If the section is newly blocked at next_slot, do not allow entry this slot
                     if (next_node, next_slot) in blocked:
-                        st["waiting_s"] += TIME_STEP_S
-                        st["log"].append((cur, st["pos"], st["pos"], "wait_blocked"))
-                        continue
+                        # Only allow to move if the section was already blocked in the previous slot (i.e., not a new block)
+                        was_blocked_prev = (next_node, next_slot-1) in blocked
+                        if not was_blocked_prev:
+                            st["waiting_s"] += TIME_STEP_S
+                            st["log"].append((cur, st["pos"], st["pos"], "wait_blocked_new"))
+                            st["was_blocked"] = True
+                            continue
                     reserved = self.res_table.get_reserved_trains(next_node, next_slot)
                     if reserved and st["info"].id not in reserved:
                         st["waiting_s"] += TIME_STEP_S
@@ -272,11 +279,12 @@ class Simulator:
                     st["slot"] = next_slot
                     st["log"].append((next_slot, prev, next_node, "move"))
                     self.usage[next_node] += 1
-                    # switch detection (track change)
                     if prev is not None and isinstance(prev, tuple) and isinstance(next_node, tuple) and prev[0] != next_node[0]:
                         st["switches"] += 1
                         st["log"].append((next_slot, prev, next_node, "switch"))
-                    # platform handling
+                    if st.get("was_blocked", False):
+                        st["log"].append((next_slot, prev, next_node, "resume"))
+                        st["was_blocked"] = False
                     if next_node == self.platform:
                         st["status"] = "at_platform"
                         dwell_slots = secs_to_slots(getattr(info, "dwell", DWELL_DEFAULT_S))
@@ -294,7 +302,6 @@ class Simulator:
                 if st.get("platform_end_slot", 0) <= cur:
                     st["status"] = "completed"
                     st["log"].append((cur, self.platform, None, "depart"))
-        # advance
         self.current_slot += 1
         self.res_table.clear_old(self.current_slot)
 

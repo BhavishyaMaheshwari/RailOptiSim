@@ -801,7 +801,6 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
         sub = df[df['train'] == tid]
         if sub.empty:
             continue
-        # Find contiguous segments for the train
         seg_start = None
         seg_end = None
         seg_section = None
@@ -858,10 +857,9 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
         fig.update_layout(title="No Gantt data")
         return fig
 
-    import plotly.graph_objects as go
-    import pandas as pd
     gantt_df = pd.DataFrame(gantt_data)
     fig = go.Figure()
+
     # Plot train bars with delay/reroute/accident info
     for _, row in gantt_df.iterrows():
         bar_opacity = 1.0 if not row['Accident'] else 0.6
@@ -918,18 +916,21 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
                 name="Accident",
                 showlegend=False
             ))
-    # Add current time marker
-    if current_slot is not None:
-        fig.add_vline(
-            x=current_slot,
-            line_width=2,
-            line_dash="dash",
-            line_color="gray",
-            annotation_text="Current Time",
-            annotation_position="top right"
-        )
-    fig.update_yaxes(autorange="reversed", title="Train")
-    fig.update_xaxes(title="Time (slot)")
+    # Add star marker for resume events
+    for tid in gantt_df['Task'].unique():
+        st = state[tid]
+        for log_entry in st.get('log', []):
+            if (isinstance(log_entry, (tuple, list)) and len(log_entry) >= 4 and log_entry[3] == 'resume'):
+                slot = log_entry[0]
+                fig.add_trace(go.Scatter(
+                    x=[slot], y=[tid],
+                    mode="markers+text",
+                    marker=dict(symbol="star", size=22, color="deepskyblue", line=dict(width=2, color="#222")),
+                    text=["★"],
+                    textposition="middle right",
+                    name="Resume",
+                    showlegend=False
+                ))
     fig.update_layout(
         title="Train Journeys (Gantt Chart)",
         height=500,
