@@ -32,10 +32,10 @@ def plot_track_timeline(state, trains, accident_mgr=None):
                 else:
                     continue
                 accident_points.append((slot, y, evtype, rem, loc[0] == "Platform"))
-                accident_slots.add(slot)
-    # Add red vertical rectangles for accident slots
-    for slot in accident_slots:
-        fig.add_vrect(x0=slot-0.5, x1=slot+0.5, fillcolor="rgba(255,0,0,0.08)", line_width=0, layer="below")
+                accident_slots.add((slot, y))
+    # Add red rectangles for accident slots/tracks
+    for slot, y in accident_slots:
+        fig.add_shape(type="rect", x0=slot-0.5, x1=slot+0.5, y0=y-0.5, y1=y+0.5, fillcolor="rgba(255,0,0,0.18)", line_width=0, layer="below")
     for i, tid in enumerate(trains_list):
         sub = df[df["train"] == tid]
         xs, ys, hover, marker_syms, marker_cols, marker_sizes, texts = [], [], [], [], [], [], []
@@ -72,18 +72,24 @@ def plot_track_timeline(state, trains, accident_mgr=None):
                 marker_cols.append("#222")
                 marker_sizes.append(22)
                 texts.append("Ended")
+            elif action == "runtime_plan":
+                hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>Rerouted!")
+                marker_syms.append("diamond-cross")
+                marker_cols.append("orange")
+                marker_sizes.append(20)
+                texts.append("Rerouted!")
+            elif action == "wait_accident":
+                hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>WAITING (accident)")
+                marker_syms.append("hourglass")
+                marker_cols.append("#d62728")
+                marker_sizes.append(18)
+                texts.append("Wait")
             elif isinstance(node, tuple) and node[0] == "Platform":
                 hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>At Platform")
                 marker_syms.append("star")
                 marker_cols.append("gold")
                 marker_sizes.append(18)
                 texts.append("At Platform")
-            elif action == "runtime_plan":
-                hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>Rerouted!")
-                marker_syms.append("diamond")
-                marker_cols.append("orange")
-                marker_sizes.append(16)
-                texts.append("Rerouted!")
             else:
                 hover.append(f"{tid}<br>slot={slot}<br>track={y}")
                 marker_syms.append("circle")
@@ -108,6 +114,11 @@ def plot_track_timeline(state, trains, accident_mgr=None):
             name="Accident",
             showlegend=True
         ))
+    # KPIs/Throughput
+    if hasattr(state, 'compute_kpis'):
+        kpis = state.compute_kpis()
+        kpi_txt = f"📊 KPIs<br>Avg wait (s): {kpis['avg_wait_s']:.1f}<br>Throughput: {kpis['throughput']}/{len(trains)}"
+        fig.add_annotation(xref="paper", yref="paper", x=1.02, y=0.75, text=kpi_txt, showarrow=False, bgcolor="white", bordercolor="black")
     fig.update_layout(
         title="Track Occupancy vs Time (slot)",
         xaxis_title="Time (slot)",
@@ -299,6 +310,101 @@ def plot_train_timeline(state, trains, accident_mgr=None):
             title="Section"
         ),
         height=400, width=1100, margin=dict(r=40), legend=dict(orientation="h", y=-0.2)
+    )
+    fig.update_xaxes(dtick=1)
+    fig.update_yaxes(dtick=1)
+    return fig
+def plot_section_vs_track(state, trains, accident_mgr=None):
+    """
+    Plots a heatmap of section vs track, showing train presence and accidents.
+    Y-axis: Track index (with Platform as -1)
+    X-axis: Section (Platform = -0.5, Sec1 = 0, ...)
+    Accidents are shown as red X/star markers.
+    """
+    import pandas as pd
+    import plotly.graph_objects as go
+    df = build_records_from_state(state)
+    if df.empty:
+        fig = go.Figure(); fig.update_layout(title="No section vs track data"); return fig
+    trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+    palette = [
+        "#E6194B", "#3CB44B", "#FFE119", "#4363D8", "#F58231",
+        "#911EB4", "#46F0F0", "#F032E6", "#BCF60C", "#17BECF"
+    ]
+    color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
+    fig = go.Figure()
+    # Plot train positions as scatter
+    for i, tid in enumerate(trains_list):
+        sub = df[df["train"] == tid]
+        xs, ys, marker_syms, marker_cols, marker_sizes, texts = [], [], [], [], [], []
+        for _, row in sub.iterrows():
+            node = row["node"]
+            if node is None:
+                continue
+            if isinstance(node, tuple) and node[0] == "Platform":
+                x = -0.5
+                y = -1
+            elif isinstance(node, tuple):
+                x = node[1]
+                y = node[0]
+            else:
+                continue
+            xs.append(x)
+            ys.append(y)
+            marker_syms.append("circle")
+            marker_cols.append(color_map[tid])
+            marker_sizes.append(14)
+            texts.append(tid)
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode="markers+text",
+            marker=dict(size=marker_sizes, color=marker_cols, symbol=marker_syms, line=dict(width=2, color="#222")),
+            text=texts, textposition="top center",
+            name=f"{tid}", showlegend=True
+        ))
+    # Accidents as red X/star markers
+    accident_points = []
+    if accident_mgr is not None:
+        all_slots = set(df["slot"].unique())
+        for slot in sorted(all_slots):
+            actives = accident_mgr.active_summary(slot)
+            for eid, evtype, loc, rem in actives:
+                if isinstance(loc, tuple) and loc[0] == "Platform":
+                    x = -0.5
+                    y = -1
+                elif isinstance(loc, tuple):
+                    x = loc[1]
+                    y = loc[0]
+                else:
+                    continue
+                accident_points.append((x, y, evtype, rem, loc[0] == "Platform"))
+    if accident_points:
+        fig.add_trace(go.Scatter(
+            x=[pt[0] for pt in accident_points],
+            y=[pt[1] for pt in accident_points],
+            mode="markers+text",
+            marker=dict(symbol=["star" if pt[4] else "x" for pt in accident_points], size=26, color="red", line=dict(width=3, color="black")),
+            text=[f"🚨 {pt[2]}" for pt in accident_points],
+            textposition="top center",
+            name="Accident",
+            showlegend=True
+        ))
+    fig.update_layout(
+        title="Section vs Track (Accident Visibility)",
+        xaxis=dict(
+            tickmode="array",
+            tickvals=[-0.5,0,1,2,3],
+            ticktext=["Platform", "Sec1", "Sec2", "Sec3", "Sec4"],
+            range=[-1, 3.5],
+            title="Section"
+        ),
+        yaxis=dict(
+            tickmode="array",
+            tickvals=[-1,0,1,2,3,4],
+            ticktext=["Platform", "Track0", "Track1", "Track2", "Track3", "Track4"],
+            range=[-1.5, 4.5],
+            title="Track"
+        ),
+        height=500, width=900, margin=dict(r=40), legend=dict(orientation="h", y=-0.2)
     )
     fig.update_xaxes(dtick=1)
     fig.update_yaxes(dtick=1)
