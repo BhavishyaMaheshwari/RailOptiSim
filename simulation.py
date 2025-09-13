@@ -142,12 +142,24 @@ class Simulator:
         self.usage = defaultdict(int)
 
     def blocked_set(self):
+        """Returns set of (node, slot) tuples that are blocked"""
         s = set()
         for delta in range(0, self.horizon_slots+1):
             slot = self.current_slot + delta
             nodes = self.acc.blocked_nodes(slot)
             for n in nodes:
                 s.add((n, slot))
+                # Also block adjacent sections for severe accidents
+                if isinstance(n, tuple) and n[0] != "Platform":
+                    track, section = n
+                    for active in self.acc.active_summary(slot):
+                        if active[2] == n and active[4].get("severity") == "high":
+                            # Block previous section
+                            if section > 0:
+                                s.add(((track, section-1), slot))
+                            # Block next section
+                            if section < 3:  # assuming 4 sections (0-3)
+                                s.add(((track, section+1), slot))
         return s
 
     def try_reserve(self, train_id, path, slots):
@@ -304,3 +316,73 @@ class Simulator:
         avg_wait = float(np.mean(waits)) if waits else 0.0
         util = {node: cnt / max(1, self.current_slot) for node, cnt in self.usage.items()}
         return {"per_train": per_train, "avg_wait_s": avg_wait, "throughput": completed, "util": util}
+
+    def handle_accident(self, node, duration):
+        """Handle accident by rerouting affected trains"""
+        # Find all trains affected by this accident
+        affected_trains = []
+        active_events = self.acc.active_summary(self.current_slot)
+        current_event = None
+        
+        # Find the relevant event
+        for ev_id, evtype, loc, rem, stats in active_events:
+            if loc == node:
+                current_event = ev_id
+                break
+                
+        if not current_event:
+            return 0
+            
+        # First identify affected trains
+        for tid, st in self.state.items():
+            if st["status"] != "completed":
+                path = st["planned_path"]
+                if not path:
+                    continue
+                    
+                # Check if train's path goes through the accident location
+                for planned_node in path:
+                    if planned_node == node:
+                        affected_trains.append(tid)
+                        self.acc.add_affected_train(current_event, tid, self.current_slot)
+                        st["log"].append({
+                            "slot": self.current_slot,
+                            "action": "affected_by_accident",
+                            "node": node,
+                            "duration": duration,
+                            "event_id": current_event
+                        })
+                        break
+        
+        # Try to reroute each affected train
+        rerouted = 0
+        for tid in affected_trains:
+            st = self.state[tid]
+            old_path = st["planned_path"]
+            old_arrival = st["planned_slots"][-1] if st["planned_slots"] else self.current_slot
+            
+            if self.attempt_runtime_plan(tid):
+                rerouted += 1
+                new_arrival = st["planned_slots"][-1]
+                delay = max(0, new_arrival - old_arrival)
+                
+                # Log the reroute with stats
+                self.acc.add_rerouted_train(current_event, tid, self.current_slot, delay)
+                st["log"].append({
+                    "slot": self.current_slot,
+                    "action": "runtime_plan",
+                    "success": True,
+                    "old_path": old_path,
+                    "delay": delay,
+                    "event_id": current_event
+                })
+            else:
+                st["log"].append({
+                    "slot": self.current_slot,
+                    "action": "runtime_plan",
+                    "success": False,
+                    "reason": "no_valid_path",
+                    "event_id": current_event
+                })
+        
+        return len(affected_trains), rerouted
