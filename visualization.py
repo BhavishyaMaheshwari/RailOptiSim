@@ -128,28 +128,36 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     """
     Plots a Gantt chart of each train's journey: bar from start to finish slot.
     Annotates accidents and reroute events. Only shows trains active at or after current_slot if provided.
+    Colors match the main timeline plots.
     """
     import pandas as pd
     import plotly.graph_objects as go
     df = build_records_from_state(state)
     if df.empty:
         fig = go.Figure(); fig.update_layout(title="No Gantt data"); return fig
+    trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+    palette = [
+        "#E6194B", "#3CB44B", "#FFE119", "#4363D8", "#F58231",
+        "#911EB4", "#46F0F0", "#F032E6", "#BCF60C", "#17BECF"
+    ]
+    color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
     gantt_data = []
     reroute_events = []
-    for tid in df["train"].unique():
+    for tid in trains_list:
         sub = df[df["train"] == tid]
         start_slot = sub["slot"].min()
         end_slot = sub["slot"].max()
-        # Only show trains that are still active if current_slot is set
         if current_slot is not None and end_slot < current_slot:
             continue
+        status = sub.iloc[-1]["action"] if not sub.empty else ""
         gantt_data.append({
             "Train": tid,
             "Start": start_slot,
             "Finish": end_slot,
-            "Type": [t.type for t in trains if t.id == tid][0]
+            "Type": [t.type for t in trains if t.id == tid][0],
+            "Color": color_map[tid],
+            "Status": status
         })
-        # Find reroute events for this train
         reroutes = sub[sub["action"] == "runtime_plan"]
         for _, row in reroutes.iterrows():
             reroute_events.append({
@@ -159,18 +167,29 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     if not gantt_data:
         fig = go.Figure(); fig.update_layout(title="No Gantt data"); return fig
     gantt_df = pd.DataFrame(gantt_data)
-    type_colors = {"Express": "#E6194B", "Passenger": "#3CB44B", "Freight": "#4363D8"}
     fig = go.Figure()
     for _, row in gantt_df.iterrows():
+        bar_opacity = 1.0 if row["Status"] != "completed" else 0.5
         fig.add_trace(go.Bar(
             x=[row["Finish"] - row["Start"] + 1],
             y=[row["Train"]],
             base=row["Start"],
             orientation='h',
-            marker_color=type_colors.get(row["Type"], "#888"),
-            name=row["Type"],
-            hovertemplate=f"Train: {row['Train']}<br>Type: {row['Type']}<br>Start: {row['Start']}<br>Finish: {row['Finish']}"
+            marker_color=row["Color"],
+            marker_line_width=2,
+            marker_line_color="#222",
+            opacity=bar_opacity,
+            name=row["Train"],
+            hovertemplate=f"Train: {row['Train']}<br>Type: {row['Type']}<br>Start: {row['Start']}<br>Finish: {row['Finish']}<br>Status: {row['Status']}"
         ))
+        # Add a marker at the end if journey completed
+        if row["Status"] == "completed":
+            fig.add_trace(go.Scatter(
+                x=[row["Finish"]+0.5], y=[row["Train"]], mode="markers+text",
+                marker=dict(symbol="x-thin-open", size=22, color="#222", line=dict(width=2, color="#222")),
+                text=["Ended"], textposition="middle right",
+                name="Ended", showlegend=False
+            ))
     # Annotate accidents as vertical lines
     if accident_mgr is not None:
         all_slots = set(df["slot"].unique())
@@ -188,7 +207,8 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
         xaxis_title="Time (slot)",
         yaxis_title="Train",
         barmode='stack',
-        height=400, width=1100, margin=dict(r=40)
+        height=400, width=1100, margin=dict(r=40),
+        legend=dict(orientation="h", y=-0.2)
     )
     return fig
 def plot_train_timeline(state, trains, accident_mgr=None):
