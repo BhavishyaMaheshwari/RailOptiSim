@@ -3,6 +3,7 @@ def plot_track_timeline(state, trains):
     Plots which train is on which track as a function of time (slot).
     Y-axis: Track index (with Platform as -1)
     X-axis: Time (slot)
+    Highlights trains at platform and reroute events.
     """
     import pandas as pd
     import plotly.graph_objects as go
@@ -18,26 +19,56 @@ def plot_track_timeline(state, trains):
     fig = go.Figure()
     for i, tid in enumerate(trains_list):
         sub = df[df["train"] == tid]
-        xs, ys, hover = [], [], []
-        for _, row in sub.iterrows():
+        xs, ys, hover, marker_syms, marker_cols, marker_sizes, texts = [], [], [], [], [], [], []
+        reroute_indices = []
+        for idx, row in sub.iterrows():
             slot = row["slot"]
             node = row["node"]
+            action = row["action"]
             if node is None:
                 y = None
             elif isinstance(node, tuple) and node[0] == "Platform":
-                y = -1  # Platform below tracks
+                y = -1
             elif isinstance(node, tuple):
-                y = node[0]  # Track index
+                y = node[0]
             else:
                 y = None
             xs.append(slot)
             ys.append(y)
             hover.append(f"{tid}<br>slot={slot}<br>track={y}")
+            # Highlight at platform
+            if isinstance(node, tuple) and node[0] == "Platform":
+                marker_syms.append("star")
+                marker_cols.append("gold")
+                marker_sizes.append(18)
+                texts.append("At Platform")
+            # Highlight reroute
+            elif action == "runtime_plan":
+                marker_syms.append("diamond")
+                marker_cols.append("orange")
+                marker_sizes.append(16)
+                texts.append("Rerouted!")
+                reroute_indices.append(len(xs)-1)
+            else:
+                marker_syms.append("circle")
+                marker_cols.append(color_map[tid])
+                marker_sizes.append(10)
+                texts.append("")
+        # Main trace
         fig.add_trace(go.Scatter(
-            x=xs, y=ys, mode="lines+markers", line=dict(color=color_map[tid], width=3),
-            marker=dict(size=10, color=color_map[tid]),
+            x=xs, y=ys, mode="lines+markers+text", line=dict(color=color_map[tid], width=3),
+            marker=dict(size=marker_sizes, color=marker_cols, symbol=marker_syms, line=dict(width=2, color="#222")),
+            text=texts, textposition="top center",
             name=f"{tid}", hoverinfo="text", hovertext=hover, showlegend=True
         ))
+        # Optionally, add a special marker for each reroute event
+        for idx in reroute_indices:
+            fig.add_trace(go.Scatter(
+                x=[xs[idx]], y=[ys[idx]], mode="markers+text",
+                marker=dict(symbol="diamond", size=22, color="orange", line=dict(width=2, color="black")),
+                text=["Rerouted!"], textposition="bottom center",
+                name="Reroute", showlegend=False
+            ))
     fig.update_layout(
         title="Track Occupancy vs Time (slot)",
         xaxis_title="Time (slot)",
