@@ -25,26 +25,11 @@ def edge_travel_time_seconds(G, u, v):
         return float(G[u][v]["travel"]) * 60.0
     return 60.0
 
-class ReservationTable:
-    def __init__(self):
-        self.reservations = {}  # (u,v) -> list of (start_slot, end_slot)
-
-    def reserve(self, u, v, start, end):
-        """Reserve track segment (u,v) between start and end time slots."""
-        if (u, v) not in self.reservations:
-            self.reservations[(u, v)] = []
-        self.reservations[(u, v)].append((start, end))
-
-    def is_available(self, u, v, start, end):
-        """Check if edge (u,v) is free between [start, end)."""
-        if (u, v) not in self.reservations:
-            return True
-        for (s, e) in self.reservations[(u, v)]:
-            # overlap check
-            if not (end <= s or start >= e):
-                return False
-        return True
-
+class NodeReservationTable:
+    def __init__(self, nodes, horizon, capacities=None):
+        self.res = {node: {} for node in nodes}
+        self.horizon = horizon
+        self.capacities = capacities if capacities else {}
 
     def is_free(self, node, slot):
         return len(self.res[node].get(slot, [])) < self.capacities.get(node, 1)
@@ -92,16 +77,26 @@ def dijkstra_dynamic(G, source, target, start_slot, res_table, blocked_pairs):
                 cur = parent[cur]
             path.append(source)
             path.reverse()
-            return path, slot  # final path + end slot
+            # Also reconstruct slots
+            slots = []
+            cur = (u, slot)
+            while cur in parent:
+                slots.append(cur[1])
+                cur = parent[cur]
+            slots.append(start_slot)
+            slots.reverse()
+            return path, slots
 
         for v in G.successors(u):
             edge = (u, v)
-            travel_time = G[u][v].get("time", 1)
-
+            travel_time = secs_to_slots(G[u][v].get("travel", 1.0) * 60.0)
             arrival_slot = slot + travel_time
 
             # Skip if resource conflict or blocked pair
-            if (u, v) in blocked_pairs or not res_table.is_available(u, v, slot, arrival_slot):
+            if (u, v) in blocked_pairs:
+                continue
+            # For node-based reservation, check if node v is free at arrival_slot
+            if not res_table.is_free(v, arrival_slot):
                 continue
 
             newg = g + travel_time
@@ -128,7 +123,7 @@ class Simulator:
         self.horizon_slots = int(math.ceil(horizon_minutes))
         nodes = list(self.G.nodes())
         caps = {self.platform: PLATFORM_CAPACITY}
-        self.res_table = ReservationTable(nodes, self.horizon_slots, capacities=caps)
+        self.res_table = NodeReservationTable(nodes, self.horizon_slots, capacities=caps)
 
         # state: per train
         self.state = {}

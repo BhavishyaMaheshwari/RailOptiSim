@@ -98,4 +98,4 @@ def control(step_clicks, n_intervals, trigger_clicks, reset_clicks, acc_track, a
     return fig, status
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True)
