@@ -95,6 +95,9 @@ def dijkstra_dynamic(G, source, target, start_slot, res_table, blocked_pairs):
             # Skip if resource conflict or blocked pair
             if (u, v) in blocked_pairs:
                 continue
+            # Prevent planning through blocked nodes/slots
+            if (v, arrival_slot) in blocked_pairs:
+                continue
             # For node-based reservation, check if node v is free at arrival_slot
             if not res_table.is_free(v, arrival_slot):
                 continue
@@ -177,6 +180,7 @@ class Simulator:
                 others = [tid for tid in self.res_table.get_reserved_trains(node, s) if tid != train_id]
                 if others:
                     return False
+            # No call to self.res_table.blocked_set() here
             to_commit.append((node, slot))
         for node, slot in to_commit:
             self.res_table.reserve(node, slot, train_id)
@@ -213,17 +217,23 @@ class Simulator:
 
     def step_slot(self):
         cur = self.current_slot
-        blocked_nodes = self.acc.blocked_nodes(cur)
+        blocked = self.blocked_set()
         for t in self.trains:
             st = self.state[t.id]
             info = st["info"]
             if st["status"] == "not_arrived":
                 if cur >= int(info.sched_arrival):
                     if st["planned_slots"] and st["planned_slots"][0] == cur:
-                        st["pos"] = st["planned_path"][0]
-                        st["slot"] = cur
-                        st["status"] = "running"
-                        st["log"].append((cur, None, st["pos"], "enter"))
+                        # Only allow entry if not blocked
+                        node = st["planned_path"][0]
+                        if (node, cur) in blocked:
+                            st["waiting_s"] += TIME_STEP_S
+                            st["log"].append((cur, None, node, "wait_blocked_entry"))
+                        else:
+                            st["pos"] = node
+                            st["slot"] = cur
+                            st["status"] = "running"
+                            st["log"].append((cur, None, st["pos"], "enter"))
             elif st["status"] == "running":
                 if not st["planned_slots"]:
                     if not self.attempt_runtime_plan(t.id):
@@ -248,7 +258,7 @@ class Simulator:
                 if idx + 1 < len(st["planned_slots"]):
                     next_slot = st["planned_slots"][idx+1]
                     next_node = st["planned_path"][idx+1]
-                    if next_node in blocked_nodes or (next_node, next_slot) in self.blocked_set():
+                    if (next_node, next_slot) in blocked:
                         st["waiting_s"] += TIME_STEP_S
                         st["log"].append((cur, st["pos"], st["pos"], "wait_blocked"))
                         continue

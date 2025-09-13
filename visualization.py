@@ -11,19 +11,51 @@ import plotly.graph_objects as go
 from utils import format_node, short_node
 
 def calculate_delays(df):
-    """Calculate delays and affected trains from the state data"""
-    delays = defaultdict(int)
-    reroutes = defaultdict(int)
-    affected = defaultdict(int)
+    """Calculate comprehensive delay and impact statistics"""
+    stats = {
+        'delays': defaultdict(int),          # Train -> total delay slots
+        'reroutes': defaultdict(int),        # Train -> number of reroutes
+        'affected': defaultdict(int),        # Train -> number of times affected
+        'current_delays': defaultdict(list),  # Train -> list of active delays
+        'blocked_sections': set(),           # Set of currently blocked sections
+        'impact_by_event': defaultdict(lambda: {
+            'affected_trains': set(),
+            'rerouted_trains': set(),
+            'total_delay': 0,
+            'active_delays': []
+        })
+    }
+    
     for _, row in df.iterrows():
         train = row["train"]
         action = row.get("action", "")
+        event_id = row.get("event_id")
+        
         if action == "runtime_plan":
-            reroutes[train] += 1
+            stats['reroutes'][train] += 1
+            if event_id:
+                stats['impact_by_event'][event_id]['rerouted_trains'].add(train)
+                delay = row.get("delay", 0)
+                if delay:
+                    stats['impact_by_event'][event_id]['total_delay'] += delay
+                    
         elif action == "affected_by_accident":
-            affected[train] += 1
-            delays[train] += row.get("duration", 0)
-    return delays, reroutes, affected
+            stats['affected'][train] += 1
+            duration = row.get("duration", 0)
+            stats['delays'][train] += duration
+            
+            if event_id:
+                stats['impact_by_event'][event_id]['affected_trains'].add(train)
+                if duration:
+                    stats['impact_by_event'][event_id]['active_delays'].append({
+                        'train': train,
+                        'duration': duration
+                    })
+            
+            if isinstance(row["node"], tuple):
+                stats['blocked_sections'].add(row["node"])
+                
+    return stats
 
 def build_records_from_state(state):
     """Build DataFrame from simulation state"""
@@ -239,51 +271,81 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
     
     fig = go.Figure()
     
-    # First, draw accident blocks (black rectangles with red borders)
+    # Draw blocked sections and accident effects
     blocked_sections = []
     accident_log = []
-    if accident_mgr is not None:
-        max_slot = df["slot"].max()
-        for slot in range(max_slot + 1):
-            actives = accident_mgr.active_summary(slot)
-            for eid, evtype, loc, rem in actives:
-                if isinstance(loc, tuple):
-                    track = -1 if loc[0] == "Platform" else loc[0]
-                    accident_log.append(f"Slot {slot}: {evtype} at {format_node(loc)} ({rem} slots left)")
-                    # Add solid black rectangle for blocked section
+    if accident_mgr is not None and current_slot is not None:
+        actives = accident_mgr.active_summary(current_slot)
+        for eid, evtype, loc, remaining, stats in actives:
+            if isinstance(loc, tuple):
+                track = -1 if loc[0] == "Platform" else loc[0]
+                severity = stats.get("severity", "normal")
+                affected = stats.get("affected_trains", 0)
+                rerouted = stats.get("rerouted_trains", 0)
+                total_delay = stats.get("total_delay", 0)
+                
+                # Draw blocked section rectangle with gradient
+                for offset in range(remaining):
+                    opacity = 0.8 - (offset * 0.1)  # Fade out into the future
                     fig.add_shape(
                         type="rect",
-                        x0=slot - 0.5,
-                        x1=slot + rem + 0.5,
+                        x0=current_slot + offset - 0.5,
+                        x1=current_slot + offset + 0.5,
                         y0=track - 0.4,
                         y1=track + 0.4,
-                        fillcolor="black",
-                        opacity=0.7,
+                        fillcolor="black" if severity == "high" else "darkred",
+                        opacity=max(0.3, opacity),
                         line=dict(color="red", width=3),
                         layer="below"
                     )
-                    # Add warning text
+                
+                # Add warning text with severity and impact
+                warning_text = f"{'🚨' if severity == 'high' else '⚠️'} BLOCKED"
+                fig.add_annotation(
+                    x=current_slot + remaining/2,
+                    y=track,
+                    text=warning_text,
+                    showarrow=False,
+                    font=dict(color="red", size=12, weight="bold"),
+                    bgcolor="rgba(255,255,255,0.9)"
+                )
+                
+                # Add impact marker
+                if affected > 0:
                     fig.add_annotation(
-                        x=slot + rem/2,
-                        y=track,
-                        text="⚠️ BLOCKED",
+                        x=current_slot,
+                        y=track + 0.5,
+                        text=f"↯ {affected} affected",
                         showarrow=False,
-                        font=dict(color="red", size=12),
-                        bgcolor="rgba(255,255,255,0.8)"
+                        yanchor="bottom",
+                        font=dict(color="red", size=10),
+                        bgcolor="rgba(255,255,255,0.9)"
                     )
-                    blocked_sections.append((slot, track))
-
-    # Plot train paths with reroute indication
+                
+                # Detailed accident log
+                accident_log.append(
+                    f"{'🚨' if severity == 'high' else '⚠️'} {evtype.upper()} at {format_node(loc)}<br>"
+                    f"⏰ {remaining} slots remaining<br>"
+                    f"🚂 {affected} trains affected<br>"
+                    f"🔄 {rerouted} trains rerouted<br>"
+                    f"⏱️ Total delay: {total_delay} slots"
+                )
+                
+                blocked_sections.append((current_slot, track))    # Plot train paths with enhanced visualization and status tracking
     for tid in trains_list:
+        train_type = [t.type for t in trains if t.id == tid][0]
         sub = df[df["train"] == tid]
-        xs, ys, hover = [], [], []
+        past_xs, past_ys, past_hover = [], [], []
+        future_xs, future_ys, future_hover = [], [], []
         reroute_xs, reroute_ys = [], []
         platform_xs, platform_ys = [], []
+        delay_xs, delay_ys = [], []
         
         for idx, row in sub.iterrows():
             slot = row["slot"]
             node = row["node"]
             action = row.get("action", "")
+            is_future = current_slot is not None and slot > current_slot
             
             if node is None:
                 y = None
@@ -296,24 +358,55 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
             else:
                 y = None
                 
-            xs.append(slot)
-            ys.append(y)
-            hover.append(f"{tid}<br>slot={slot}<br>{format_node(node)}<br>{action}")
+            hover_text = (
+                f"{tid} ({train_type})<br>"
+                f"Slot: {slot}<br>"
+                f"Location: {format_node(node)}"
+            )
+            if action:
+                hover_text += f"<br>Action: {action}"
+                
+            if is_future:
+                future_xs.append(slot)
+                future_ys.append(y)
+                future_hover.append(hover_text + " (Predicted)")
+            else:
+                past_xs.append(slot)
+                past_ys.append(y)
+                past_hover.append(hover_text)
             
             if action == "runtime_plan":
                 reroute_xs.append(slot)
                 reroute_ys.append(y)
+            elif action == "affected_by_accident":
+                delay_xs.append(slot)
+                delay_ys.append(y)
 
-        # Main path
-        fig.add_trace(go.Scatter(
-            x=xs, y=ys,
-            mode="lines+markers",
-            line=dict(color=color_map[tid], width=3),
-            marker=dict(size=8, color=color_map[tid]),
-            name=tid,
-            hoverinfo="text",
-            hovertext=hover
-        ))
+        # Past path (solid line)
+        if past_xs:
+            fig.add_trace(go.Scatter(
+                x=past_xs, y=past_ys,
+                mode="lines+markers",
+                line=dict(color=color_map[tid], width=3),
+                marker=dict(size=8, color=color_map[tid]),
+                name=f"{tid} ({train_type})",
+                hoverinfo="text",
+                hovertext=past_hover
+            ))
+        
+        # Future path (dashed line)
+        if future_xs:
+            fig.add_trace(go.Scatter(
+                x=future_xs, y=future_ys,
+                mode="lines+markers",
+                line=dict(color=color_map[tid], width=2, dash="dot"),
+                marker=dict(size=6, color=color_map[tid], opacity=0.7),
+                name=f"{tid} ({train_type}) - Predicted",
+                hoverinfo="text",
+                hovertext=future_hover,
+                opacity=0.6,
+                showlegend=True
+            ))
         
         # Platform visits (gold stars)
         if platform_xs:
@@ -336,37 +429,92 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
                 name=f"{tid} Rerouted",
                 showlegend=False
             ))
+            
+        # Delay events (red triangles)
+        if delay_xs:
+            fig.add_trace(go.Scatter(
+                x=delay_xs, y=delay_ys,
+                mode="markers+text",
+                marker=dict(symbol="triangle-down", size=10, color="red", line=dict(color="black", width=1)),
+                text=["⏱"] * len(delay_xs),
+                textposition="top center",
+                name=f"{tid} Delayed",
+                showlegend=False
+            ))
 
-    # Update layout with accident log
-    title_text = f"Track Timeline"
-    if accident_log:
-        title_text += f" ({len(accident_log)} active accidents)"
+    # Add current time marker if provided
+    if current_slot is not None:
+        fig.add_vline(
+            x=current_slot,
+            line_width=2,
+            line_dash="solid",
+            line_color="gray",
+            annotation=dict(
+                text="Current Time",
+                textangle=-90,
+                yanchor="bottom",
+                font=dict(size=12)
+            )
+        )
+
+    # Update layout with enhanced information
+    title_text = [
+        "Track Timeline",
+        f"Current Slot: {current_slot}" if current_slot is not None else None,
+        f"Active Accidents: {len(accident_log)}" if accident_log else None,
+    ]
+    title_text = " | ".join(filter(None, title_text))
         
     fig.update_layout(
-        title=title_text,
-        xaxis_title="Time (slot)",
+        title=dict(
+            text=title_text,
+            x=0.5,
+            xanchor="center"
+        ),
+        xaxis=dict(
+            title="Time (slot)",
+            showgrid=True,
+            gridcolor='rgba(128,128,128,0.2)',
+            zeroline=True,
+            zerolinewidth=1,
+            zerolinecolor='gray'
+        ),
         yaxis=dict(
             tickmode="array",
             tickvals=[-1] + list(range(5)),
             ticktext=["Platform"] + [f"Track {i}" for i in range(5)],
-            title="Track"
+            title="Track",
+            showgrid=True,
+            gridcolor='rgba(128,128,128,0.2)',
+            zeroline=True,
+            zerolinewidth=1,
+            zerolinecolor='gray'
         ),
-        height=500,
-        width=1100,
-        showlegend=True
+        height=600,  # Increased height for better visibility
+        width=1200,  # Increased width for better spacing
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.2,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(r=300)  # Extra right margin for accident log
     )
     
-    # Add accident log as annotation
+    # Add accident log as enhanced annotation with icons and formatting
     if accident_log:
         fig.add_annotation(
             xref="paper", yref="paper",
             x=1.02, y=1,
-            text="<br>".join(["🚨 Accident Log:"] + accident_log),
+            text="<br>".join(accident_log),
             showarrow=False,
             bordercolor="red",
             borderwidth=2,
-            bgcolor="white",
-            align="left"
+            bgcolor="rgba(255,255,255,0.95)",
+            align="left",
+            font=dict(size=11)
         )
     
     return fig
@@ -387,7 +535,9 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
     color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
     
     # Calculate delays and get all time slots
-    delays, reroutes = calculate_delays(df)
+    stats = calculate_delays(df)
+    delays = stats['delays']
+    reroutes = stats['reroutes']
     total_delay = sum(delays.values())
     all_slots = set(df["slot"].unique())
     
@@ -560,30 +710,20 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
             showlegend=True
         ))
 
-    # Add comprehensive status display
-    status_txt = (
-        f"📊 Live Stats<br>"
-        f"Total Delay: {total_delay} slots<br>"
-        f"Delayed Trains: {len([d for d in delays.values() if d > 0])}<br>"
-        f"Rerouted Trains: {len([r for r in reroutes.values() if r > 0])}<br>"
-        f"Blocked Sections: {len(blocked_sections)}<br>"
-        f"Active Accidents: {len(accident_points)}"
+    # Add KPI annotation
+    kpi_txt = (
+        f"📊 KPIs<br>Avg wait (s): {stats.get('avg_wait_s', 0):.1f}<br>"
+        f"Throughput: {stats.get('throughput', 0)}/{len(trains_list)}"
     )
-    
-    if hasattr(state, 'compute_kpis'):
-        kpis = state.compute_kpis()
-        status_txt += f"<br>Throughput: {kpis['throughput']}/{len(trains)}"
-        
     fig.add_annotation(
         xref="paper",
         yref="paper",
         x=1.02,
         y=0.95,
-        text=status_txt,
+        text=kpi_txt,
         showarrow=False,
         bgcolor="white",
-        bordercolor="red" if total_delay > 0 else "black",
-        borderwidth=2
+        bordercolor="black"
     )
 
     # Add accident log
@@ -638,7 +778,9 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
 
     # Setup and calculate delays
     trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
-    delays, reroutes = calculate_delays(df)
+    stats = calculate_delays(df)
+    delays = stats['delays']
+    reroutes = stats['reroutes']
     total_delay = sum(delays.values())
     
     # Color setup
@@ -654,7 +796,165 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     accident_log = []
     blocked_sections = {}
 
-    # Process train data
+    # Build a DataFrame for each train's journey, with delay/reroute/accident info
+    for tid in trains_list:
+        sub = df[df['train'] == tid]
+        if sub.empty:
+            continue
+        # Find contiguous segments for the train
+        seg_start = None
+        seg_end = None
+        seg_section = None
+        seg_delay = 0
+        seg_reroute = 0
+        seg_accident = False
+        for idx, row in sub.iterrows():
+            slot = row['slot']
+            node = row['node']
+            action = row.get('action', '')
+            if isinstance(node, tuple) and node[0] == 'Platform':
+                continue  # skip platform for Gantt
+            section = node[1] if isinstance(node, tuple) else None
+            if seg_start is None:
+                seg_start = slot
+                seg_section = section
+                seg_delay = 0
+                seg_reroute = 0
+                seg_accident = False
+            seg_end = slot
+            if action == 'affected_by_accident':
+                seg_delay += row.get('duration', 1) or 1
+                seg_accident = True
+            if action == 'runtime_plan':
+                seg_reroute += 1
+            # If next row is a different section or last row, close segment
+            next_idx = idx + 1
+            next_section = None
+            if next_idx < len(sub):
+                next_node = sub.iloc[next_idx]['node']
+                if isinstance(next_node, tuple):
+                    next_section = next_node[1]
+            if next_idx >= len(sub) or next_section != section:
+                gantt_data.append(dict(
+                    Task=tid,
+                    Start=seg_start,
+                    Finish=seg_end+1,
+                    Section=seg_section,
+                    Color=color_map[tid],
+                    Delay=seg_delay,
+                    Reroutes=seg_reroute,
+                    Accident=seg_accident,
+                    Type=[t.type for t in trains if t.id == tid][0]
+                ))
+                seg_start = None
+                seg_end = None
+                seg_section = None
+                seg_delay = 0
+                seg_reroute = 0
+                seg_accident = False
+
+    if not gantt_data:
+        fig = go.Figure()
+        fig.update_layout(title="No Gantt data")
+        return fig
+
+    import plotly.graph_objects as go
+    import pandas as pd
+    gantt_df = pd.DataFrame(gantt_data)
+    fig = go.Figure()
+    # Plot train bars with delay/reroute/accident info
+    for _, row in gantt_df.iterrows():
+        bar_opacity = 1.0 if not row['Accident'] else 0.6
+        bar_color = row['Color'] if not row['Accident'] else 'black'
+        fig.add_trace(go.Bar(
+            x=[row['Finish'] - row['Start']],
+            y=[row['Task']],
+            base=row['Start'],
+            orientation='h',
+            marker_color=bar_color,
+            marker_line_width=2,
+            marker_line_color="#222",
+            opacity=bar_opacity,
+            name=row['Task'],
+            hovertemplate=(
+                f"Train: {row['Task']}<br>"
+                f"Type: {row['Type']}<br>"
+                f"Section: {row['Section']}<br>"
+                f"Start: {row['Start']}<br>"
+                f"Finish: {row['Finish']}<br>"
+                f"Delay: {row['Delay']} slots<br>"
+                f"Reroutes: {row['Reroutes']}<br>"
+                f"Accident: {'Yes' if row['Accident'] else 'No'}"
+            )
+        ))
+        # Add delay/reroute/accident icons
+        if row['Delay'] > 0:
+            fig.add_trace(go.Scatter(
+                x=[row['Finish']], y=[row['Task']],
+                mode="markers+text",
+                marker=dict(symbol="hourglass", size=18, color="red"),
+                text=[f"⌛ {row['Delay']}"] if row['Delay'] > 0 else [""],
+                textposition="middle right",
+                name="Delay",
+                showlegend=False
+            ))
+        if row['Reroutes'] > 0:
+            fig.add_trace(go.Scatter(
+                x=[row['Finish']], y=[row['Task']],
+                mode="markers+text",
+                marker=dict(symbol="diamond", size=16, color="orange"),
+                text=[f"↺ {row['Reroutes']}"] if row['Reroutes'] > 0 else [""],
+                textposition="top right",
+                name="Reroute",
+                showlegend=False
+            ))
+        if row['Accident']:
+            fig.add_trace(go.Scatter(
+                x=[row['Finish']], y=[row['Task']],
+                mode="markers+text",
+                marker=dict(symbol="x", size=18, color="black"),
+                text=["🚨"],
+                textposition="bottom right",
+                name="Accident",
+                showlegend=False
+            ))
+    # Add current time marker
+    if current_slot is not None:
+        fig.add_vline(
+            x=current_slot,
+            line_width=2,
+            line_dash="dash",
+            line_color="gray",
+            annotation_text="Current Time",
+            annotation_position="top right"
+        )
+    fig.update_yaxes(autorange="reversed", title="Train")
+    fig.update_xaxes(title="Time (slot)")
+    fig.update_layout(
+        title="Train Journeys (Gantt Chart)",
+        height=500,
+        width=1200,
+        margin=dict(r=300, t=60),
+        showlegend=True,
+        legend=dict(orientation="h", y=-0.2),
+        font=dict(size=14),
+        plot_bgcolor="#f9f9f9"
+    )
+    # Add KPI annotation
+    kpi_txt = (
+        f"📊 KPIs<br>Avg wait (s): {stats.get('avg_wait_s', 0):.1f}<br>"
+        f"Throughput: {stats.get('throughput', 0)}/{len(trains_list)}"
+    )
+    fig.add_annotation(
+        xref="paper", yref="paper",
+        x=1.02, y=0.95,
+        text=kpi_txt,
+        showarrow=False,
+        bgcolor="white",
+        bordercolor="black",
+        font=dict(size=13)
+    )
+    return fig
     for tid in trains_list:
         sub = df[df["train"] == tid]
         start_slot = sub["slot"].min()
@@ -727,7 +1027,7 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
         all_slots = set(df["slot"].unique())
         for slot in sorted(all_slots):
             actives = accident_mgr.active_summary(slot)
-            for eid, evtype, loc, rem in actives:
+            for eid, evtype, loc, rem, stats in actives:
                 if isinstance(loc, tuple):
                     # Add red background for accident duration
                     fig.add_vrect(
@@ -872,13 +1172,14 @@ def plot_train_timeline(state, trains, accident_mgr=None):
         all_slots = set(df["slot"].unique())
         for slot in sorted(all_slots):
             actives = accident_mgr.active_summary(slot)
-            for eid, evtype, loc, rem in actives:
+            for eid, evtype, loc, rem, stats in actives:
                 if isinstance(loc, tuple) and loc[0] == "Platform":
                     y = -0.5
                 elif isinstance(loc, tuple):
                     y = loc[1]
                 else:
                     continue
+                severity = stats.get("severity", "normal")
                 fig.add_trace(go.Scatter(
                     x=[slot], y=[y], mode="markers+text",
                     marker=dict(symbol="x", size=22, color="red", line=dict(width=3, color="black")),
@@ -886,7 +1187,9 @@ def plot_train_timeline(state, trains, accident_mgr=None):
                     name="Accident", showlegend=False
                 ))
     # Calculate delays and initialize tracking
-    delays, reroutes = calculate_delays(df)
+    stats = calculate_delays(df)
+    delays = stats['delays']
+    reroutes = stats['reroutes']
     accident_log = []
     blocked_sections = {}
     
@@ -894,12 +1197,19 @@ def plot_train_timeline(state, trains, accident_mgr=None):
     if accident_mgr is not None:
         for slot in sorted(all_slots):
             actives = accident_mgr.active_summary(slot)
-            for eid, evtype, loc, rem in actives:
+            for eid, evtype, loc, rem, stats in actives:
                 if isinstance(loc, tuple):
                     track = -1 if loc[0] == "Platform" else loc[0]
                     section = -0.5 if loc[0] == "Platform" else loc[1]
                     blocked_sections[(track, section)] = (slot, rem)
-                    accident_log.append(f"Slot {slot}: {format_node(loc)} - {evtype} ({rem} slots left)")
+                    affected = stats.get("affected_trains", 0)
+                    rerouted = stats.get("rerouted_trains", 0)
+                    accident_log.append(
+                        f"Slot {slot}: {format_node(loc)} - {evtype}<br>"
+                        f"⏰ {rem} slots remaining<br>"
+                        f"🚂 {affected} trains affected<br>"
+                        f"🔄 {rerouted} trains rerouted"
+                    )
 
     # Enhanced train position plotting
     for tid in trains_list:
@@ -962,21 +1272,18 @@ def plot_train_timeline(state, trains, accident_mgr=None):
             borderwidth=2
         )
 
-    # Add delay statistics
-    stats_txt = (
-        f"📊 Impact Stats<br>"
-        f"Total Delay: {sum(delays.values())} slots<br>"
-        f"Delayed Trains: {len([d for d in delays.values() if d > 0])}<br>"
-        f"Rerouted Trains: {len([r for r in reroutes.values() if r > 0])}<br>"
-        f"Blocked Sections: {len(blocked_sections)}"
+    # Add KPI annotation
+    kpi_txt = (
+        f"📊 KPIs<br>Avg wait (s): {stats.get('avg_wait_s', 0):.1f}<br>"
+        f"Throughput: {stats.get('throughput', 0)}/{len(trains_list)}"
     )
     fig.add_annotation(
         xref="paper", yref="paper",
         x=1.02, y=0.5,
-        text=stats_txt,
+        text=kpi_txt,
         showarrow=False,
         bgcolor="white",
-        bordercolor="red" if sum(delays.values()) > 0 else "black"
+        bordercolor="black"
     )
 
     fig.update_layout(
@@ -1021,7 +1328,9 @@ def plot_section_vs_track(state, trains, accident_mgr=None):
     all_slots = set(df["slot"].unique())
     
     # Calculate delays
-    delays, reroutes = calculate_delays(df)
+    stats = calculate_delays(df)
+    delays = stats['delays']
+    reroutes = stats['reroutes']
     total_delay = sum(delays.values())
     
     fig = go.Figure()
