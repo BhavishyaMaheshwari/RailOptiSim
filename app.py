@@ -26,6 +26,18 @@ server = app.server
 
 app.layout = dbc.Container([
     html.H2("RailOptimusSim — Live Control Panel"),
+    html.Div([
+        html.P("""
+        This simulation models 10 trains running on 5 tracks, each with 4 sections.
+        """),
+        html.Ul([
+            html.Li("Track index (0..4): The track where the accident will occur."),
+            html.Li("Section index (0..3): The section on the selected track for the accident."),
+            html.Li("Duration slots (minutes): How long the accident lasts (1-120)."),
+        ]),
+        html.P("Fill these fields and click 'Trigger Accident ⚠' to schedule an accident at the specified location and duration.", style={"fontStyle": "italic"}),
+        html.Hr()
+    ]),
     dbc.Row([
         dbc.Col(dbc.Button("Step ▶", id="step-btn", color="primary"), width="auto"),
         dbc.Col(dbc.Button("Run ⏵", id="run-btn", color="success"), width="auto"),
