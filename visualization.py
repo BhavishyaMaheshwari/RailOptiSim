@@ -1,9 +1,9 @@
-def plot_track_timeline(state, trains):
+def plot_track_timeline(state, trains, accident_mgr=None):
     """
     Plots which train is on which track as a function of time (slot).
     Y-axis: Track index (with Platform as -1)
     X-axis: Time (slot)
-    Highlights trains at platform and reroute events.
+    Highlights trains at platform, reroute events, and accidents. Affected slots are red.
     """
     import pandas as pd
     import plotly.graph_objects as go
@@ -17,10 +17,28 @@ def plot_track_timeline(state, trains):
     ]
     color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
     fig = go.Figure()
+    # Collect accident slots for red background
+    accident_slots = set()
+    accident_points = []
+    if accident_mgr is not None:
+        all_slots = set(df["slot"].unique())
+        for slot in sorted(all_slots):
+            actives = accident_mgr.active_summary(slot)
+            for eid, evtype, loc, rem in actives:
+                if isinstance(loc, tuple) and loc[0] == "Platform":
+                    y = -1
+                elif isinstance(loc, tuple):
+                    y = loc[0]
+                else:
+                    continue
+                accident_points.append((slot, y, evtype, rem, loc[0] == "Platform"))
+                accident_slots.add(slot)
+    # Add red vertical rectangles for accident slots
+    for slot in accident_slots:
+        fig.add_vrect(x0=slot-0.5, x1=slot+0.5, fillcolor="rgba(255,0,0,0.08)", line_width=0, layer="below")
     for i, tid in enumerate(trains_list):
         sub = df[df["train"] == tid]
         xs, ys, hover, marker_syms, marker_cols, marker_sizes, texts = [], [], [], [], [], [], []
-        reroute_indices = []
         for idx, row in sub.iterrows():
             slot = row["slot"]
             node = row["node"]
@@ -35,40 +53,61 @@ def plot_track_timeline(state, trains):
                 y = None
             xs.append(slot)
             ys.append(y)
-            hover.append(f"{tid}<br>slot={slot}<br>track={y}")
-            # Highlight at platform
-            if isinstance(node, tuple) and node[0] == "Platform":
+            # Show platform arrival/departure/end
+            if action == "enter":
+                hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>STARTED journey")
+                marker_syms.append("circle-open-dot")
+                marker_cols.append(color_map[tid])
+                marker_sizes.append(16)
+                texts.append("Start")
+            elif action == "depart":
+                hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>DEPARTED platform")
+                marker_syms.append("star-diamond")
+                marker_cols.append("#FFD700")
+                marker_sizes.append(20)
+                texts.append("Departed")
+            elif action == "completed":
+                hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>Journey Ended")
+                marker_syms.append("x-thin-open")
+                marker_cols.append("#222")
+                marker_sizes.append(22)
+                texts.append("Ended")
+            elif isinstance(node, tuple) and node[0] == "Platform":
+                hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>At Platform")
                 marker_syms.append("star")
                 marker_cols.append("gold")
                 marker_sizes.append(18)
                 texts.append("At Platform")
-            # Highlight reroute
             elif action == "runtime_plan":
+                hover.append(f"{tid}<br>slot={slot}<br>track={y}<br>Rerouted!")
                 marker_syms.append("diamond")
                 marker_cols.append("orange")
                 marker_sizes.append(16)
                 texts.append("Rerouted!")
-                reroute_indices.append(len(xs)-1)
             else:
+                hover.append(f"{tid}<br>slot={slot}<br>track={y}")
                 marker_syms.append("circle")
                 marker_cols.append(color_map[tid])
                 marker_sizes.append(10)
                 texts.append("")
-        # Main trace
         fig.add_trace(go.Scatter(
             x=xs, y=ys, mode="lines+markers+text", line=dict(color=color_map[tid], width=3),
             marker=dict(size=marker_sizes, color=marker_cols, symbol=marker_syms, line=dict(width=2, color="#222")),
             text=texts, textposition="top center",
             name=f"{tid}", hoverinfo="text", hovertext=hover, showlegend=True
         ))
-        # Optionally, add a special marker for each reroute event
-        for idx in reroute_indices:
-            fig.add_trace(go.Scatter(
-                x=[xs[idx]], y=[ys[idx]], mode="markers+text",
-                marker=dict(symbol="diamond", size=22, color="orange", line=dict(width=2, color="black")),
-                text=["Rerouted!"], textposition="bottom center",
-                name="Reroute", showlegend=False
-            ))
+    # Accidents as red X markers (with special marker for platform accidents)
+    if accident_points:
+        fig.add_trace(go.Scatter(
+            x=[pt[0] for pt in accident_points],
+            y=[pt[1] for pt in accident_points],
+            mode="markers+text",
+            marker=dict(symbol=["star" if pt[4] else "x" for pt in accident_points], size=26, color="red", line=dict(width=3, color="black")),
+            text=[f"🚨 {pt[2]} ({pt[3]} left)" for pt in accident_points],
+            textposition="top center",
+            name="Accident",
+            showlegend=True
+        ))
     fig.update_layout(
         title="Track Occupancy vs Time (slot)",
         xaxis_title="Time (slot)",
@@ -85,39 +124,79 @@ def plot_track_timeline(state, trains):
     fig.update_yaxes(dtick=1)
     return fig
 
-def plot_gantt_chart(state, trains):
+def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     """
     Plots a Gantt chart of each train's journey: bar from start to finish slot.
+    Annotates accidents and reroute events. Only shows trains active at or after current_slot if provided.
     """
     import pandas as pd
-    import plotly.express as px
+    import plotly.graph_objects as go
     df = build_records_from_state(state)
     if df.empty:
-        fig = px.timeline(); fig.update_layout(title="No Gantt data"); return fig
+        fig = go.Figure(); fig.update_layout(title="No Gantt data"); return fig
     gantt_data = []
+    reroute_events = []
     for tid in df["train"].unique():
         sub = df[df["train"] == tid]
         start_slot = sub["slot"].min()
         end_slot = sub["slot"].max()
+        # Only show trains that are still active if current_slot is set
+        if current_slot is not None and end_slot < current_slot:
+            continue
         gantt_data.append({
             "Train": tid,
             "Start": start_slot,
             "Finish": end_slot,
             "Type": [t.type for t in trains if t.id == tid][0]
         })
+        # Find reroute events for this train
+        reroutes = sub[sub["action"] == "runtime_plan"]
+        for _, row in reroutes.iterrows():
+            reroute_events.append({
+                "Train": tid,
+                "Slot": row["slot"]
+            })
+    if not gantt_data:
+        fig = go.Figure(); fig.update_layout(title="No Gantt data"); return fig
     gantt_df = pd.DataFrame(gantt_data)
-    fig = px.timeline(
-        gantt_df, x_start="Start", x_end="Finish", y="Train", color="Type",
-        title="Train Journey Gantt Chart"
+    type_colors = {"Express": "#E6194B", "Passenger": "#3CB44B", "Freight": "#4363D8"}
+    fig = go.Figure()
+    for _, row in gantt_df.iterrows():
+        fig.add_trace(go.Bar(
+            x=[row["Finish"] - row["Start"] + 1],
+            y=[row["Train"]],
+            base=row["Start"],
+            orientation='h',
+            marker_color=type_colors.get(row["Type"], "#888"),
+            name=row["Type"],
+            hovertemplate=f"Train: {row['Train']}<br>Type: {row['Type']}<br>Start: {row['Start']}<br>Finish: {row['Finish']}"
+        ))
+    # Annotate accidents as vertical lines
+    if accident_mgr is not None:
+        all_slots = set(df["slot"].unique())
+        for slot in sorted(all_slots):
+            actives = accident_mgr.active_summary(slot)
+            for eid, evtype, loc, rem in actives:
+                fig.add_vline(x=slot, line_width=2, line_dash="dash", line_color="red",
+                              annotation_text=f"Accident {format_node(loc)}", annotation_position="top left")
+    # Annotate reroute events
+    for ev in reroute_events:
+        fig.add_vline(x=ev["Slot"], line_width=2, line_dash="dot", line_color="orange",
+                      annotation_text=f"Reroute {ev['Train']}", annotation_position="top right")
+    fig.update_layout(
+        title="Train Journey Gantt Chart (slots)",
+        xaxis_title="Time (slot)",
+        yaxis_title="Train",
+        barmode='stack',
+        height=400, width=1100, margin=dict(r=40)
     )
-    fig.update_yaxes(autorange="reversed")
-    fig.update_layout(height=400, width=1100, margin=dict(r=40))
     return fig
-def plot_train_timeline(state, trains):
+def plot_train_timeline(state, trains, accident_mgr=None):
     """
     Plots each train's position (section/platform) as a function of time (slot).
     Y-axis: Section (Platform = -0.5, Sec1 = 0, ...)
     X-axis: Time (slot)
+    Shows accidents and reroutes.
     """
     import pandas as pd
     import plotly.graph_objects as go
@@ -133,10 +212,11 @@ def plot_train_timeline(state, trains):
     fig = go.Figure()
     for i, tid in enumerate(trains_list):
         sub = df[df["train"] == tid]
-        xs, ys, hover = [], [], []
+        xs, ys, hover, marker_syms, marker_cols, marker_sizes, texts = [], [], [], [], [], [], []
         for _, row in sub.iterrows():
             slot = row["slot"]
             node = row["node"]
+            action = row["action"]
             if node is None:
                 y = None
             elif isinstance(node, tuple) and node[0] == "Platform":
@@ -148,11 +228,46 @@ def plot_train_timeline(state, trains):
             xs.append(slot)
             ys.append(y)
             hover.append(f"{tid}<br>slot={slot}<br>pos={node}")
+            # Highlight at platform
+            if isinstance(node, tuple) and node[0] == "Platform":
+                marker_syms.append("star")
+                marker_cols.append("gold")
+                marker_sizes.append(18)
+                texts.append("At Platform")
+            elif action == "runtime_plan":
+                marker_syms.append("diamond")
+                marker_cols.append("orange")
+                marker_sizes.append(16)
+                texts.append("Rerouted!")
+            else:
+                marker_syms.append("circle")
+                marker_cols.append(color_map[tid])
+                marker_sizes.append(10)
+                texts.append("")
         fig.add_trace(go.Scatter(
-            x=xs, y=ys, mode="lines+markers", line=dict(color=color_map[tid], width=3),
-            marker=dict(size=10, color=color_map[tid]),
+            x=xs, y=ys, mode="lines+markers+text", line=dict(color=color_map[tid], width=3),
+            marker=dict(size=marker_sizes, color=marker_cols, symbol=marker_syms, line=dict(width=2, color="#222")),
+            text=texts, textposition="top center",
             name=f"{tid}", hoverinfo="text", hovertext=hover, showlegend=True
         ))
+    # Accidents as red X markers
+    if accident_mgr is not None:
+        all_slots = set(df["slot"].unique())
+        for slot in sorted(all_slots):
+            actives = accident_mgr.active_summary(slot)
+            for eid, evtype, loc, rem in actives:
+                if isinstance(loc, tuple) and loc[0] == "Platform":
+                    y = -0.5
+                elif isinstance(loc, tuple):
+                    y = loc[1]
+                else:
+                    continue
+                fig.add_trace(go.Scatter(
+                    x=[slot], y=[y], mode="markers+text",
+                    marker=dict(symbol="x", size=22, color="red", line=dict(width=3, color="black")),
+                    text=[f"🚨 {evtype}"], textposition="top center",
+                    name="Accident", showlegend=False
+                ))
     fig.update_layout(
         title="Train Position vs Time (slot)",
         xaxis_title="Time (slot)",
