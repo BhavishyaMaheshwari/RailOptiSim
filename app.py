@@ -1,9 +1,27 @@
-# app.py
+"""
+RailOptimusSim - Advanced Railway Traffic Simulation System
+
+This is the main application file for the RailOptimusSim system, providing a comprehensive
+web-based interface for railway traffic simulation with real-time accident management,
+dynamic rerouting, and advanced visualization capabilities.
+
+Features:
+- Real-time railway traffic simulation
+- Interactive accident management
+- Dynamic pathfinding and rerouting
+- Comprehensive visualization suite
+- Professional control interface
+
+Author: RailOptimusSim Development Team
+Version: 2.0 Professional Edition
+"""
+
 import dash
 from dash import dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 import uuid
 
+# Import core system components
 from data import build_graph, generate_fixed_trains
 from accident_manager import EmergencyEvent, AccidentManager
 from simulation import Simulator
@@ -11,7 +29,16 @@ from visualization import plot_track_timeline, plot_gantt_chart, plot_train_time
 from utils import format_node
 
 def generate_accident_log(accident_mgr, current_slot):
-    """Generate comprehensive accident log HTML"""
+    """
+    Generate comprehensive accident log HTML with enhanced formatting
+    
+    Args:
+        accident_mgr (AccidentManager): The accident management system
+        current_slot (int): Current simulation time slot
+        
+    Returns:
+        list: HTML elements for the accident log display
+    """
     log_entries = []
     
     # Add prescheduled accidents
@@ -46,7 +73,19 @@ def generate_accident_log(accident_mgr, current_slot):
     return log_entries
 
 def generate_system_stats(state, trains, accident_mgr, current_slot):
-    """Generate system statistics HTML"""
+    """
+    Generate comprehensive system statistics HTML with enhanced metrics
+    
+    Args:
+        state (dict): Current simulation state
+        trains (list): List of train objects
+        accident_mgr (AccidentManager): Accident management system
+        current_slot (int): Current simulation time slot
+        
+    Returns:
+        list: HTML elements for the system statistics display
+    """
+    # Calculate train status distribution
     completed_trains = len([t for t in trains if state.get(t.id, {}).get("status") == "completed"])
     blocked_trains = len([t for t in trains if state.get(t.id, {}).get("status") == "blocked_by_accident"])
     running_trains = len([t for t in trains if state.get(t.id, {}).get("status") == "running"])
@@ -85,85 +124,186 @@ def generate_system_stats(state, trains, accident_mgr, current_slot):
     
     return stats_html
 
-# Build infrastructure + trains
-NUM_TRACKS = 5
-SECTIONS = 4
+# =============================================================================
+# SYSTEM INITIALIZATION - PROFESSIONAL RAILWAY SIMULATION SETUP
+# =============================================================================
+
+# Railway Network Configuration
+NUM_TRACKS = 5          # Number of parallel tracks in the railway network
+SECTIONS = 4            # Number of sections per track
+HORIZON_MINUTES = 20    # Simulation planning horizon in minutes
+
+# Build the railway infrastructure graph
+print("🚂 Initializing Railway Infrastructure...")
 G, PLATFORM = build_graph(num_tracks=NUM_TRACKS, sections_per_track=SECTIONS)
+print(f"✅ Railway network built: {NUM_TRACKS} tracks × {SECTIONS} sections + Platform")
+
+# Generate the train fleet
+print("🚂 Generating Train Fleet...")
 trains = generate_fixed_trains(sections_per_track=SECTIONS)
+print(f"✅ {len(trains)} trains generated and ready for deployment")
+
+# Initialize the accident management system
+print("🚨 Initializing Emergency Management System...")
 acc_mgr = AccidentManager()
+print("✅ Emergency response system online")
 
-# Add test accidents
-test_accidents = [
-    EmergencyEvent(event_id="test1", ev_type="accident", location=(2, 1), start_time=5, duration_slots=4),  # Track 2, Section 1
-    EmergencyEvent(event_id="test2", ev_type="accident", location=(3, 2), start_time=8, duration_slots=3),  # Track 3, Section 2
-    EmergencyEvent(event_id="test3", ev_type="accident", location=("Platform", 0), start_time=12, duration_slots=2)  # Platform accident
-]
-for ev in test_accidents:
-    acc_mgr.schedule(ev)
+# System starts with a clean slate - no predefined accidents
+# All accidents will be triggered through the user interface for maximum control
+print("🎯 System ready for user-controlled emergency scenarios")
 
-sim = Simulator(graph=G, platform_node=PLATFORM, trains=trains, accident_mgr=acc_mgr, horizon_minutes=SECTIONS*NUM_TRACKS)
+# Initialize the simulation engine
+print("⚙️ Initializing Simulation Engine...")
+sim = Simulator(
+    graph=G, 
+    platform_node=PLATFORM, 
+    trains=trains, 
+    accident_mgr=acc_mgr, 
+    horizon_minutes=HORIZON_MINUTES
+)
 
-# initial planning
+# Perform initial route planning for all trains
+print("🗺️ Performing Initial Route Planning...")
 sim.plan_initial()
+print("✅ All trains have optimized routes planned")
+print("🚀 RailOptimusSim is ready for operation!")
 
-# Dash app
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+# =============================================================================
+# WEB APPLICATION INITIALIZATION - PROFESSIONAL DASHBOARD SETUP
+# =============================================================================
+
+# Initialize the Dash web application with Bootstrap styling
+print("🌐 Initializing Web Application...")
+app = dash.Dash(
+    __name__, 
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    title="RailOptimusSim - Advanced Railway Control Center",
+    meta_tags=[
+        {"name": "viewport", "content": "width=device-width, initial-scale=1"},
+        {"name": "description", "content": "Professional Railway Traffic Simulation System"}
+    ]
+)
 server = app.server
+print("✅ Web application initialized with professional styling")
 
 app.layout = dbc.Container([
-    html.H2("RailOptimusSim — Live Control Panel"),
     html.Div([
-        html.P("""
-        This simulation models 10 trains running on 5 tracks, each with 4 sections.
-        """),
-        html.Ul([
-            html.Li("Track index (0..4): The track where the accident will occur."),
-            html.Li("Section index (0..3): The section on the selected track for the accident."),
-            html.Li("Duration slots (minutes): How long the accident lasts (1-120)."),
-        ]),
-        html.P("Fill these fields and click 'Trigger Accident ⚠' to schedule an accident at the specified location and duration.", style={"fontStyle": "italic"}),
-        html.Hr()
+        html.H1("🚂 RailOptimusSim — Advanced Railway Control Center 🚂", 
+                className="text-center mb-4", 
+                style={"color": "#2C3E50", "fontWeight": "bold", "textShadow": "2px 2px 4px rgba(0,0,0,0.1)"}),
+        html.P("Real-time railway traffic simulation with intelligent accident management and dynamic rerouting", 
+               className="text-center text-muted mb-4", 
+               style={"fontSize": "16px"})
     ]),
-    dbc.Row([
-        dbc.Col(dbc.Button("Step ▶", id="step-btn", color="primary"), width="auto"),
-        dbc.Col(dbc.Button("Run ⏵", id="run-btn", color="success"), width="auto"),
-        dbc.Col(dbc.Button("Pause ⏸", id="pause-btn", color="warning"), width="auto"),
-        dbc.Col(dbc.Button("Reset ↺", id="reset-btn", color="danger"), width="auto"),
-    ], className="mb-2"),
-    dbc.Row([
-        dbc.Col(dbc.Input(id="acc-track", placeholder="Track index (0..4)", type="number", min=0, max=NUM_TRACKS-1, value=2), width=3),
-        dbc.Col(dbc.Input(id="acc-section", placeholder="Section index (0..3)", type="number", min=0, max=SECTIONS-1, value=2), width=3),
-        dbc.Col(dbc.Input(id="acc-duration", placeholder="Duration slots (minutes)", type="number", min=1, max=120, value=6), width=3),
-        dbc.Col(dbc.Button("Trigger Accident ⚠", id="trigger-acc", color="danger"), width=3)
-    ], className="mb-2"),
+    
+    dbc.Card([
+        dbc.CardBody([
+            html.H4("🎯 Simulation Overview", className="card-title"),
+            html.P("This advanced simulation models 10 trains (Express, Passenger, Freight) operating on a 5-track railway network with 4 sections each, featuring intelligent pathfinding and real-time accident response.", 
+                   className="card-text"),
+            html.Hr(),
+            html.H5("⚠️ Emergency Accident Interface", className="mb-3"),
+            html.P("Use the controls below to trigger emergency scenarios and test the system's response capabilities:", 
+                   style={"fontStyle": "italic", "color": "#7F8C8D"}),
+            html.Ul([
+                html.Li(html.Strong("Track Index (0-4):"), " Select the track where the emergency will occur"),
+                html.Li(html.Strong("Section Index (0-3):"), " Choose the specific section on the selected track"),
+                html.Li(html.Strong("Duration (1-120 slots):"), " Set how long the emergency will last (in minutes)"),
+            ], className="mb-3"),
+            html.P("Click 'Trigger Accident ⚠️' to activate the emergency scenario and observe real-time system response.", 
+                   style={"fontStyle": "italic", "color": "#E74C3C", "fontWeight": "bold"}),
+        ])
+    ], className="mb-4"),
+    dbc.Card([
+        dbc.CardBody([
+            html.H5("🎮 Simulation Controls", className="card-title mb-3"),
+            dbc.Row([
+                dbc.Col(dbc.Button("Step ▶", id="step-btn", color="primary", size="lg", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Run ⏵", id="run-btn", color="success", size="lg", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Pause ⏸", id="pause-btn", color="warning", size="lg", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Reset ↺", id="reset-btn", color="danger", size="lg", className="me-2"), width="auto"),
+            ], className="mb-3"),
+            html.Small("Use these controls to manage the simulation: Step for manual progression, Run for continuous operation, Pause to stop, and Reset to restart.", 
+                      className="text-muted")
+        ])
+    ], className="mb-4"),
+    dbc.Card([
+        dbc.CardBody([
+            html.H5("🚨 Emergency Scenario Trigger", className="card-title mb-3"),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Track Index", className="fw-bold"),
+                    dbc.Input(id="acc-track", placeholder="0-4", type="number", min=0, max=NUM_TRACKS-1, value=2, size="lg")
+                ], width=3),
+                dbc.Col([
+                    dbc.Label("Section Index", className="fw-bold"),
+                    dbc.Input(id="acc-section", placeholder="0-3", type="number", min=0, max=SECTIONS-1, value=2, size="lg")
+                ], width=3),
+                dbc.Col([
+                    dbc.Label("Duration (slots)", className="fw-bold"),
+                    dbc.Input(id="acc-duration", placeholder="1-120", type="number", min=1, max=120, value=6, size="lg")
+                ], width=3),
+                dbc.Col([
+                    dbc.Label("Action", className="fw-bold"),
+                    dbc.Button("🚨 Trigger Emergency", id="trigger-acc", color="danger", size="lg", className="w-100")
+                ], width=3)
+            ], className="align-items-end"),
+            html.Small("Configure emergency parameters and click to activate. The system will automatically detect affected trains and initiate rerouting procedures.", 
+                      className="text-muted mt-2")
+        ])
+    ], className="mb-4"),
     dcc.Graph(id="track-timeline-graph"),
     dcc.Graph(id="timeline-graph"),
     dcc.Graph(id="gantt-graph"),
     dbc.Row([
         dbc.Col([
-            html.H4("🚨 Accident Log", className="mb-3"),
-            html.Div(id="accident-log", style={
-                "height": "300px", 
-                "overflow-y": "auto", 
-                "border": "1px solid #ddd", 
-                "padding": "10px",
-                "background-color": "#f8f9fa",
-                "border-radius": "5px"
-            })
+            dbc.Card([
+                dbc.CardHeader(html.H4("🚨 Emergency Event Log", className="mb-0", style={"color": "#E74C3C"})),
+                dbc.CardBody([
+                    html.Div(id="accident-log", style={
+                        "height": "350px", 
+                        "overflow-y": "auto", 
+                        "border": "2px solid #E74C3C", 
+                        "padding": "15px",
+                        "background-color": "#FDF2F2",
+                        "border-radius": "8px",
+                        "fontFamily": "monospace"
+                    })
+                ])
+            ])
         ], width=6),
         dbc.Col([
-            html.H4("📊 System Statistics", className="mb-3"),
-            html.Div(id="system-stats", style={
-                "height": "300px", 
-                "border": "1px solid #ddd", 
-                "padding": "10px",
-                "background-color": "#f8f9fa",
-                "border-radius": "5px"
-            })
+            dbc.Card([
+                dbc.CardHeader(html.H4("📊 System Performance Dashboard", className="mb-0", style={"color": "#27AE60"})),
+                dbc.CardBody([
+                    html.Div(id="system-stats", style={
+                        "height": "350px", 
+                        "border": "2px solid #27AE60", 
+                        "padding": "15px",
+                        "background-color": "#F0F9F0",
+                        "border-radius": "8px",
+                        "fontFamily": "Arial, sans-serif"
+                    })
+                ])
+            ])
         ], width=6)
     ], className="mt-4"),
     dcc.Interval(id="interval", interval=1000, n_intervals=0, disabled=True),
-    html.Div(id="sim-status", style={"marginTop": "10px"}),
+    
+    dbc.Card([
+        dbc.CardBody([
+            html.H5("📡 System Status", className="card-title mb-3"),
+            html.Div(id="sim-status", style={
+                "padding": "15px",
+                "border": "2px solid #3498DB",
+                "borderRadius": "8px",
+                "backgroundColor": "#EBF3FD",
+                "fontFamily": "Arial, sans-serif",
+                "fontSize": "16px",
+                "fontWeight": "bold"
+            })
+        ])
+    ], className="mt-4"),
 ], fluid=True)
 
 # Callback: run/pause
@@ -261,5 +401,23 @@ def control(step_clicks, n_intervals, trigger_clicks, reset_clicks, acc_track, a
     
     return track_fig, timeline_fig, gantt_fig, status, accident_log, system_stats
 
+# =============================================================================
+# APPLICATION EXECUTION - PROFESSIONAL DEPLOYMENT
+# =============================================================================
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    print("\n" + "="*80)
+    print("🚀 RAILOPTIMUSSIM - ADVANCED RAILWAY CONTROL CENTER")
+    print("="*80)
+    print("🌐 Starting web server...")
+    print("📊 Dashboard will be available at: http://127.0.0.1:8050")
+    print("🎯 System ready for professional railway simulation!")
+    print("="*80 + "\n")
+    
+    # Launch the application with professional settings
+    app.run(
+        debug=True,
+        host='127.0.0.1',
+        port=8050,
+        dev_tools_hot_reload=True
+    )

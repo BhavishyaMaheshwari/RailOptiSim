@@ -20,8 +20,14 @@ class EmergencyEvent:
         return self.start_time <= slot < self.end_time
 
 class AccidentManager:
+    """
+    Advanced Accident Management System
+    
+    Handles emergency events with comprehensive tracking and impact assessment.
+    Features intelligent train classification and detailed statistics collection.
+    """
     def __init__(self):
-        self.scheduled = []  # list of EmergencyEvent
+        self.scheduled = []  # List of EmergencyEvent objects
         self.affected_trains = defaultdict(list)  # event_id -> list of affected trains
         self.rerouted_trains = defaultdict(list)  # event_id -> list of rerouted trains
         self.involved_trains = defaultdict(str)  # event_id -> involved train id
@@ -29,13 +35,21 @@ class AccidentManager:
             "total_delay": 0,
             "trains_affected": 0,
             "trains_rerouted": 0,
-            "resolution_time": None
+            "resolution_time": None,
+            "severity_level": "normal",
+            "impact_radius": 0
         })
 
     def schedule(self, event: EmergencyEvent):
-        """Schedule a new emergency event"""
+        """
+        Schedule a new emergency event with comprehensive initialization
+        
+        Args:
+            event (EmergencyEvent): The emergency event to schedule
+        """
         self.scheduled.append(event)
-        # Initialize stats for this event
+        
+        # Initialize comprehensive stats for this event
         self.accident_stats[event.event_id] = {
             "total_delay": 0,
             "trains_affected": 0,
@@ -44,7 +58,10 @@ class AccidentManager:
             "end_time": event.end_time,
             "location": event.location,
             "type": event.ev_type,
-            "resolution_time": None
+            "resolution_time": None,
+            "severity_level": event.info.get("severity", "normal") if event.info else "normal",
+            "impact_radius": 0,
+            "created_at": event.start_time
         }
 
     def add_affected_train(self, event_id, train_id, current_slot):

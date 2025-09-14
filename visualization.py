@@ -1,10 +1,21 @@
-# visualization.py
-from collections import defaultdict
-import pandas as pd
-import plotly.graph_objects as go
-from utils import format_node, short_node
+"""
+RailOptimusSim Visualization Module
 
-# visualization.py
+This module provides comprehensive visualization capabilities for the railway simulation system.
+It includes advanced plotting functions for track timelines, train journeys, and Gantt charts
+with professional styling and interactive features.
+
+Features:
+- Track Timeline Visualization with real-time updates
+- Train Journey Gantt Charts with status indicators
+- Interactive hover information and event markers
+- Professional color schemes and styling
+- Enhanced visual indicators for resume/exit events
+
+Author: RailOptimusSim Development Team
+Version: 2.0 Professional Edition
+"""
+
 from collections import defaultdict
 import pandas as pd
 import plotly.graph_objects as go
@@ -291,11 +302,25 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
             df["is_blocked"] = df.apply(lambda x: x["node"] in blocked and x["slot"] == current_slot, axis=1)
 
     trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
-    palette = [
-        "#E6194B", "#3CB44B", "#FFE119", "#4363D8", "#F58231",
-        "#911EB4", "#46F0F0", "#F032E6", "#BCF60C", "#17BECF"
+    
+    # Create unique colors for each train - ensuring maximum visual distinction
+    unique_train_colors = [
+        "#FF6B6B",  # T1 - Vibrant Red
+        "#4ECDC4",  # T2 - Teal
+        "#45B7D1",  # T3 - Blue
+        "#96CEB4",  # T4 - Mint Green
+        "#FFEAA7",  # T5 - Yellow
+        "#DDA0DD",  # T6 - Plum
+        "#98D8C8",  # T7 - Seafoam
+        "#F7DC6F",  # T8 - Gold
+        "#BB8FCE",  # T9 - Light Purple
+        "#85C1E9"   # T10 - Light Blue
     ]
-    color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
+    
+    # Create color mapping - each train gets a unique color
+    color_map = {}
+    for i, tid in enumerate(trains_list):
+        color_map[tid] = unique_train_colors[i % len(unique_train_colors)]
     
     fig = go.Figure()
     
@@ -518,11 +543,17 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
             fig.add_trace(go.Scatter(
                 x=resume_xs, y=resume_ys,
                 mode="markers+text",
-                marker=dict(symbol="star", size=18, color="lime", line=dict(color="black", width=2)),
+                marker=dict(
+                    symbol="star", 
+                    size=25, 
+                    color="#00FF7F", 
+                    line=dict(width=3, color="#006400")
+                ),
                 text=["★ RESUME"] * len(resume_xs),
                 textposition="top center",
                 name=f"{tid} Resume",
-                showlegend=False
+                showlegend=False,
+                hovertemplate=f"<b>{tid}</b><br>🚀 RESUMED at slot %{{x}}<br>Track: %{{y}}<br><extra></extra>"
             ))
         
         # Add journey completion markers
@@ -540,11 +571,17 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
             fig.add_trace(go.Scatter(
                 x=completion_xs, y=completion_ys,
                 mode="markers+text",
-                marker=dict(symbol="x", size=20, color="green", line=dict(color="black", width=2)),
+                marker=dict(
+                    symbol="x", 
+                    size=28, 
+                    color="#32CD32", 
+                    line=dict(width=4, color="#228B22")
+                ),
                 text=["✓ COMPLETED"] * len(completion_xs),
                 textposition="top center",
                 name=f"{tid} Completed",
-                showlegend=False
+                showlegend=False,
+                hovertemplate=f"<b>{tid}</b><br>🎯 COMPLETED at slot %{{x}}<br>Track: %{{y}}<br><extra></extra>"
             ))
 
     # Add current time marker if provided
@@ -879,7 +916,7 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
 
 def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     """
-    Plots a Gantt chart of each train's journey with enhanced delay visualization.
+    Plots a Gantt chart of each train's journey with enhanced delay visualization and sophisticated color coding.
     """
     import pandas as pd
     import plotly.graph_objects as go
@@ -894,12 +931,48 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     reroutes = stats['reroutes']
     total_delay = sum(delays.values())
     
-    # Color setup
-    palette = [
-        "#E6194B", "#3CB44B", "#FFE119", "#4363D8", "#F58231",
-        "#911EB4", "#46F0F0", "#F032E6", "#BCF60C", "#17BECF"
+    # Create unique colors for each train - ensuring maximum visual distinction
+    unique_train_colors = [
+        "#FF6B6B",  # T1 - Vibrant Red
+        "#4ECDC4",  # T2 - Teal
+        "#45B7D1",  # T3 - Blue
+        "#96CEB4",  # T4 - Mint Green
+        "#FFEAA7",  # T5 - Yellow
+        "#DDA0DD",  # T6 - Plum
+        "#98D8C8",  # T7 - Seafoam
+        "#F7DC6F",  # T8 - Gold
+        "#BB8FCE",  # T9 - Light Purple
+        "#85C1E9"   # T10 - Light Blue
     ]
-    color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
+    
+    # Create color mapping - each train gets a unique color
+    color_map = {}
+    for i, tid in enumerate(trains_list):
+        color_map[tid] = unique_train_colors[i % len(unique_train_colors)]
+    
+    # Status-based color variations (darker versions for different states)
+    status_colors = {
+        "completed": {},  # Will be filled dynamically
+        "blocked": {},    # Will be filled dynamically
+        "delayed": {},    # Will be filled dynamically
+        "normal": color_map
+    }
+    
+    # Create status variations for each train's base color
+    for tid in trains_list:
+        base_color = color_map[tid]
+        # Convert hex to RGB for manipulation
+        hex_color = base_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        
+        # Create darker versions for different statuses
+        completed_rgb = tuple(max(0, int(c * 0.7)) for c in rgb)
+        blocked_rgb = tuple(max(0, int(c * 0.5)) for c in rgb)
+        delayed_rgb = (255, 165, 0)  # Orange for all delayed trains
+        
+        status_colors["completed"][tid] = f"#{completed_rgb[0]:02x}{completed_rgb[1]:02x}{completed_rgb[2]:02x}"
+        status_colors["blocked"][tid] = f"#{blocked_rgb[0]:02x}{blocked_rgb[1]:02x}{blocked_rgb[2]:02x}"
+        status_colors["delayed"][tid] = "#FFA500"  # Orange for delayed
     
     # Collect data
     gantt_data = []
@@ -1047,42 +1120,73 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     gantt_df = pd.DataFrame(gantt_data)
     fig = go.Figure()
 
-    # Plot train bars with proper handling of blocked vs moving vs completed segments
+    # Plot train bars with enhanced visual styling and sophisticated color coding
     for _, row in gantt_df.iterrows():
-        if row['Status'] == 'blocked':
-            # Blocked segments - red/dark color
-            bar_color = 'darkred'
-            bar_opacity = 0.8
+        train_id = row['Task']
+        train_type = row['Type']
+        status = row['Status']
+        
+        # Enhanced color and styling based on status and train type
+        if status == 'blocked':
+            # Blocked segments - darker version of train's unique color
+            bar_color = status_colors["blocked"].get(train_id, "#8B0000")
+            bar_opacity = 0.9
+            marker_pattern = dict(
+                color=bar_color,
+                line=dict(width=3, color="#8B0000")
+            )
             hover_text = (
-                f"🚫 Train: {row['Task']}<br>"
-                f"Status: BLOCKED<br>"
+                f"🚫 <b>{train_id}</b> ({train_type})<br>"
+                f"Status: <span style='color:red'>BLOCKED BY ACCIDENT</span><br>"
                 f"Duration: {row['Finish'] - row['Start']} slots<br>"
                 f"Start: Slot {row['Start']}<br>"
-                f"Finish: Slot {row['Finish']}"
+                f"Finish: Slot {row['Finish']}<br>"
+                f"Impact: High Priority Block"
             )
-        elif row['Status'] == 'completed':
-            # Completed journey segments - green color
-            bar_color = 'green'
+        elif status == 'completed':
+            # Completed journey segments - darker version of train's unique color
+            bar_color = status_colors["completed"].get(train_id, "#2E8B57")
             bar_opacity = 1.0
+            marker_pattern = dict(
+                color=bar_color,
+                line=dict(width=3, color="#2E8B57")
+            )
             hover_text = (
-                f"✅ Train: {row['Task']}<br>"
-                f"Type: {row['Type']}<br>"
+                f"✅ <b>{train_id}</b> ({train_type})<br>"
+                f"Status: <span style='color:green'>JOURNEY COMPLETED</span><br>"
                 f"Section: {row['Section']}<br>"
                 f"Start: Slot {row['Start']}<br>"
                 f"Finish: Slot {row['Finish']}<br>"
-                f"Status: JOURNEY COMPLETED"
+                f"Total Duration: {row['Finish'] - row['Start']} slots"
             )
         else:
-            # Moving segments - normal train color
-            bar_color = row['Color']
-            bar_opacity = 1.0
+            # Moving segments - use train's unique color
+            base_color = color_map.get(train_id, row['Color'])
+            delay_count = delays.get(train_id, 0)
+            reroute_count = reroutes.get(train_id, 0)
+            
+            # Adjust opacity and color intensity based on delays
+            if delay_count > 0:
+                bar_opacity = 0.8
+                marker_pattern = dict(
+                    color=base_color,
+                    line=dict(width=2, color="#FF8C00")
+                )
+            else:
+                bar_opacity = 1.0
+                marker_pattern = dict(
+                    color=base_color,
+                    line=dict(width=2, color="#2C3E50")
+                )
+            
             hover_text = (
-                f"🚂 Train: {row['Task']}<br>"
-                f"Type: {row['Type']}<br>"
+                f"🚂 <b>{train_id}</b> ({train_type})<br>"
+                f"Status: <span style='color:blue'>MOVING</span><br>"
                 f"Section: {row['Section']}<br>"
                 f"Start: Slot {row['Start']}<br>"
                 f"Finish: Slot {row['Finish']}<br>"
-                f"Status: Moving"
+                f"Delays: {delay_count} slots<br>"
+                f"Reroutes: {reroute_count}"
             )
             
         fig.add_trace(go.Bar(
@@ -1090,28 +1194,75 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
             y=[row['Task']],
             base=row['Start'],
             orientation='h',
-            marker_color=bar_color,
-            marker_line_width=2,
-            marker_line_color="#222",
+            marker=marker_pattern,
             opacity=bar_opacity,
-            name=row['Task'],
-            hovertemplate=hover_text,
-            showlegend=False
+            name=f"{train_id} ({train_type})",
+            hovertemplate=hover_text + "<extra></extra>",
+            showlegend=True
         ))
-    # Add star marker for resume events
+    # Add enhanced visual markers for special events
     for tid in gantt_df['Task'].unique():
         st = state[tid]
+        train_type = [t.type for t in trains if t.id == tid][0]
+        
+        # Resume events - bright green star markers with enhanced visibility
         for log_entry in st.get('log', []):
             if (isinstance(log_entry, (tuple, list)) and len(log_entry) >= 4 and log_entry[3] == 'resume'):
                 slot = log_entry[0]
                 fig.add_trace(go.Scatter(
                     x=[slot], y=[tid],
                     mode="markers+text",
-                    marker=dict(symbol="star", size=22, color="deepskyblue", line=dict(width=2, color="#222")),
-                    text=["★"],
+                    marker=dict(
+                        symbol="star", 
+                        size=30, 
+                        color="#00FF7F", 
+                        line=dict(width=4, color="#006400")
+                    ),
+                    text=["★ RESUME"],
                     textposition="middle right",
-                    name="Resume",
-                    showlegend=False
+                    name="Resume Event",
+                    showlegend=False,
+                    hovertemplate=f"<b>{tid}</b> ({train_type})<br>🚀 RESUMED OPERATIONS at slot {slot}<br>Status: Back to normal operation<br><extra></extra>"
+                ))
+        
+        # Reroute events - diamond markers
+        for log_entry in st.get('log', []):
+            if (isinstance(log_entry, (tuple, list)) and len(log_entry) >= 4 and log_entry[3] == 'runtime_plan'):
+                slot = log_entry[0]
+                fig.add_trace(go.Scatter(
+                    x=[slot], y=[tid],
+                    mode="markers+text",
+                    marker=dict(
+                        symbol="diamond", 
+                        size=20, 
+                        color="#FF8C00", 
+                        line=dict(width=2, color="#FF4500")
+                    ),
+                    text=["↺ REROUTE"],
+                    textposition="top center",
+                    name="Reroute Event",
+                    showlegend=False,
+                    hovertemplate=f"<b>{tid}</b> ({train_type})<br>Rerouted at slot {slot}<br><extra></extra>"
+                ))
+        
+        # Completion events - bright green checkmark markers
+        for log_entry in st.get('log', []):
+            if (isinstance(log_entry, (tuple, list)) and len(log_entry) >= 4 and log_entry[3] == 'completed'):
+                slot = log_entry[0]
+                fig.add_trace(go.Scatter(
+                    x=[slot], y=[tid],
+                    mode="markers+text",
+                    marker=dict(
+                        symbol="x", 
+                        size=28, 
+                        color="#32CD32", 
+                        line=dict(width=4, color="#228B22")
+                    ),
+                    text=["✓ COMPLETE"],
+                    textposition="bottom center",
+                    name="Completion Event",
+                    showlegend=False,
+                    hovertemplate=f"<b>{tid}</b> ({train_type})<br>🎯 JOURNEY COMPLETED at slot {slot}<br>Status: Mission accomplished!<br><extra></extra>"
                 ))
     # Calculate statistics for title and annotations
     completed_trains = len([t for t in trains_list if state.get(t, {}).get("status") == "completed"])
@@ -1119,39 +1270,92 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     total_delays = sum(stats['delays'].values())
     total_reroutes = sum(stats['reroutes'].values())
     
+    # Enhanced layout with better styling and organization
     fig.update_layout(
         title=dict(
-            text=f"📊 TRAIN JOURNEY GANTT CHART | ✅ Completed: {completed_trains}/{len(trains_list)} | 🚫 Blocked: {blocked_trains}",
+            text=f"🚂 <b>RAILWAY JOURNEY GANTT CHART</b> 🚂<br>"
+                 f"<span style='font-size:14px'>✅ Completed: {completed_trains}/{len(trains_list)} | "
+                 f"🚫 Blocked: {blocked_trains} | ⏱️ Total Delays: {total_delays} slots | "
+                 f"🔄 Reroutes: {total_reroutes}</span>",
             x=0.5,
-            xanchor="center"
+            xanchor="center",
+            font=dict(size=18, color="#2C3E50")
         ),
-        height=600,
-        width=1400,
-        margin=dict(r=300, t=80),
+        height=700,  # Increased height for better visibility
+        width=1600,  # Increased width for better spacing
+        margin=dict(r=350, t=120, b=80, l=100),  # Better margins
         showlegend=True,
-        legend=dict(orientation="h", y=-0.2),
-        font=dict(size=14),
-        plot_bgcolor="#f9f9f9"
+        legend=dict(
+            orientation="v", 
+            y=1, 
+            x=1.02,
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="#2C3E50",
+            borderwidth=1,
+            font=dict(size=12)
+        ),
+        font=dict(size=13, family="Arial, sans-serif"),
+        plot_bgcolor="rgba(248,249,250,0.8)",
+        paper_bgcolor="white",
+        xaxis=dict(
+            title=dict(text="⏰ Time (slots)", font=dict(size=14, color="#2C3E50")),
+            gridcolor="rgba(128,128,128,0.2)",
+            showgrid=True,
+            zeroline=True,
+            zerolinecolor="rgba(128,128,128,0.5)"
+        ),
+        yaxis=dict(
+            title=dict(text="🚂 Trains", font=dict(size=14, color="#2C3E50")),
+            gridcolor="rgba(128,128,128,0.2)",
+            showgrid=True,
+            categoryorder="array",
+            categoryarray=trains_list
+        )
     )
     
+    # Enhanced KPI display with better styling and more information
+    completion_rate = (completed_trains/len(trains_list)*100) if trains_list else 0
+    avg_delay = total_delays / len(trains_list) if trains_list else 0
+    
     kpi_txt = (
-        f"📊 JOURNEY STATISTICS<br>"
-        f"✅ Completed: {completed_trains}/{len(trains_list)}<br>"
-        f"🚫 Currently Blocked: {blocked_trains}<br>"
-        f"⏱️ Total Delays: {total_delays} slots<br>"
-        f"🔄 Total Reroutes: {total_reroutes}<br>"
-        f"📈 Completion Rate: {(completed_trains/len(trains_list)*100):.1f}%"
+        f"<b>📊 SYSTEM PERFORMANCE</b><br>"
+        f"<span style='color:#27AE60'>✅ Completed:</span> {completed_trains}/{len(trains_list)}<br>"
+        f"<span style='color:#E74C3C'>🚫 Blocked:</span> {blocked_trains}<br>"
+        f"<span style='color:#F39C12'>⏱️ Total Delays:</span> {total_delays} slots<br>"
+        f"<span style='color:#3498DB'>🔄 Reroutes:</span> {total_reroutes}<br>"
+        f"<span style='color:#9B59B6'>📈 Completion Rate:</span> {completion_rate:.1f}%<br>"
+        f"<span style='color:#E67E22'>⏰ Avg Delay:</span> {avg_delay:.1f} slots"
     )
+    
     fig.add_annotation(
         xref="paper", yref="paper",
         x=1.02, y=0.95,
         text=kpi_txt,
         showarrow=False,
-        bgcolor="rgba(240,248,255,0.9)",
-        bordercolor="blue",
+        bgcolor="rgba(255,255,255,0.95)",
+        bordercolor="#2C3E50",
         borderwidth=2,
-        font=dict(size=12)
+        font=dict(size=11, family="Arial, sans-serif"),
+        align="left"
     )
+    
+    # Add current time indicator if available
+    if current_slot is not None:
+        fig.add_vline(
+            x=current_slot,
+            line_width=3,
+            line_dash="solid",
+            line_color="#E74C3C",
+            annotation=dict(
+                text=f"<b>Current Time: Slot {current_slot}</b>",
+                textangle=-90,
+                yanchor="bottom",
+                font=dict(size=12, color="#E74C3C"),
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="#E74C3C",
+                borderwidth=1
+            )
+        )
     return fig
     for tid in trains_list:
         sub = df[df["train"] == tid]
@@ -1319,11 +1523,25 @@ def plot_train_timeline(state, trains, accident_mgr=None):
     if df.empty:
         fig = go.Figure(); fig.update_layout(title="No timeline data"); return fig
     trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
-    palette = [
-        "#E6194B", "#3CB44B", "#FFE119", "#4363D8", "#F58231",
-        "#911EB4", "#46F0F0", "#F032E6", "#BCF60C", "#17BECF"
+    
+    # Create unique colors for each train - ensuring maximum visual distinction
+    unique_train_colors = [
+        "#FF6B6B",  # T1 - Vibrant Red
+        "#4ECDC4",  # T2 - Teal
+        "#45B7D1",  # T3 - Blue
+        "#96CEB4",  # T4 - Mint Green
+        "#FFEAA7",  # T5 - Yellow
+        "#DDA0DD",  # T6 - Plum
+        "#98D8C8",  # T7 - Seafoam
+        "#F7DC6F",  # T8 - Gold
+        "#BB8FCE",  # T9 - Light Purple
+        "#85C1E9"   # T10 - Light Blue
     ]
-    color_map = {tid: palette[i % len(palette)] for i, tid in enumerate(trains_list)}
+    
+    # Create color mapping - each train gets a unique color
+    color_map = {}
+    for i, tid in enumerate(trains_list):
+        color_map[tid] = unique_train_colors[i % len(unique_train_colors)]
     fig = go.Figure()
     for i, tid in enumerate(trains_list):
         sub = df[df["train"] == tid]
@@ -1361,13 +1579,13 @@ def plot_train_timeline(state, trains, accident_mgr=None):
                 texts.append("🚫 BLOCKED")
             elif action == "accident_resolved":
                 marker_syms.append("star")
-                marker_cols.append("lime")
-                marker_sizes.append(18)
+                marker_cols.append("#00FF7F")
+                marker_sizes.append(25)
                 texts.append("★ RESUME")
             elif action == "completed":
                 marker_syms.append("x")
-                marker_cols.append("green")
-                marker_sizes.append(20)
+                marker_cols.append("#32CD32")
+                marker_sizes.append(28)
                 texts.append("✓ COMPLETED")
             else:
                 marker_syms.append("circle")
