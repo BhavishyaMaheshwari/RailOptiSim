@@ -302,6 +302,20 @@ class Simulator:
                 if st.get("platform_end_slot", 0) <= cur:
                     st["status"] = "completed"
                     st["log"].append((cur, self.platform, None, "depart"))
+            elif st["status"] == "blocked_by_accident":
+                # Train is blocked due to accident - check if accident duration has ended
+                if st.get("accident_blocked_until", 0) <= cur:
+                    # Accident duration ended, resume normal operation
+                    st["status"] = "running"
+                    st["log"].append((cur, st["pos"], st["pos"], "accident_resolved"))
+                    # Try to replan the route from current position
+                    if not self.attempt_runtime_plan(t.id):
+                        st["waiting_s"] += TIME_STEP_S
+                        st["log"].append((cur, st["pos"], st["pos"], "wait_noplan_after_accident"))
+                else:
+                    # Still blocked by accident
+                    st["waiting_s"] += TIME_STEP_S
+                    st["log"].append((cur, st["pos"], st["pos"], "blocked_by_accident"))
         self.current_slot += 1
         self.res_table.clear_old(self.current_slot)
 
@@ -335,9 +349,10 @@ class Simulator:
         return {"per_train": per_train, "avg_wait_s": avg_wait, "throughput": completed, "util": util}
 
     def handle_accident(self, node, duration):
-        """Handle accident by rerouting affected trains"""
+        """Handle accident by blocking the involved train and rerouting others"""
         # Find all trains affected by this accident
-        affected_trains = []
+        involved_train = None  # The train actually involved in the accident
+        affected_trains = []   # Other trains that need rerouting
         active_events = self.acc.active_summary(self.current_slot)
         current_event = None
         
@@ -348,11 +363,63 @@ class Simulator:
                 break
                 
         if not current_event:
-            return 0
+            return 0, 0
             
-        # First identify affected trains
+        # First, identify the train actually involved in the accident (currently at the location)
         for tid, st in self.state.items():
-            if st["status"] != "completed":
+            if st["status"] in ["running", "at_platform"] and st["pos"] == node:
+                involved_train = tid
+                # Block this train for the duration of the accident
+                st["status"] = "blocked_by_accident"
+                st["accident_blocked_until"] = self.current_slot + duration
+                st["log"].append({
+                    "slot": self.current_slot,
+                    "action": "involved_in_accident",
+                    "node": node,
+                    "duration": duration,
+                    "event_id": current_event,
+                    "blocked_until": self.current_slot + duration
+                })
+                self.acc.add_affected_train(current_event, tid, self.current_slot)
+                self.acc.set_involved_train(current_event, tid)
+                break
+        
+        # If no train is currently at the accident location, find the first train that would reach it
+        if involved_train is None:
+            earliest_arrival = float('inf')
+            for tid, st in self.state.items():
+                if st["status"] != "completed" and st["planned_path"]:
+                    try:
+                        # Find when this train would reach the accident location
+                        for i, planned_node in enumerate(st["planned_path"]):
+                            if planned_node == node and i < len(st["planned_slots"]):
+                                arrival_slot = st["planned_slots"][i]
+                                if arrival_slot < earliest_arrival:
+                                    earliest_arrival = arrival_slot
+                                    involved_train = tid
+                                break
+                    except (IndexError, ValueError):
+                        continue
+            
+            # If we found a train that would reach the accident location, block it
+            if involved_train is not None:
+                st = self.state[involved_train]
+                st["status"] = "blocked_by_accident"
+                st["accident_blocked_until"] = self.current_slot + duration
+                st["log"].append({
+                    "slot": self.current_slot,
+                    "action": "involved_in_accident",
+                    "node": node,
+                    "duration": duration,
+                    "event_id": current_event,
+                    "blocked_until": self.current_slot + duration
+                })
+                self.acc.add_affected_train(current_event, involved_train, self.current_slot)
+                self.acc.set_involved_train(current_event, involved_train)
+        
+        # Now identify other trains that need rerouting (those that would pass through the blocked section)
+        for tid, st in self.state.items():
+            if st["status"] != "completed" and tid != involved_train:
                 path = st["planned_path"]
                 if not path:
                     continue
@@ -371,7 +438,7 @@ class Simulator:
                         })
                         break
         
-        # Try to reroute each affected train
+        # Try to reroute each affected train (excluding the involved train)
         rerouted = 0
         for tid in affected_trains:
             st = self.state[tid]
@@ -402,4 +469,4 @@ class Simulator:
                     "event_id": current_event
                 })
         
-        return len(affected_trains), rerouted
+        return len(affected_trains) + (1 if involved_train else 0), rerouted

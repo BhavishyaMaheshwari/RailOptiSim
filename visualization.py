@@ -55,6 +55,22 @@ def calculate_delays(df):
             if isinstance(row["node"], tuple):
                 stats['blocked_sections'].add(row["node"])
                 
+        elif action == "involved_in_accident":
+            stats['affected'][train] += 1
+            duration = row.get("duration", 0)
+            stats['delays'][train] += duration
+            
+            if event_id:
+                stats['impact_by_event'][event_id]['affected_trains'].add(train)
+                if duration:
+                    stats['impact_by_event'][event_id]['active_delays'].append({
+                        'train': train,
+                        'duration': duration
+                    })
+            
+            if isinstance(row["node"], tuple):
+                stats['blocked_sections'].add(row["node"])
+                
     return stats
 
 def build_records_from_state(state):
@@ -381,6 +397,9 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
             elif action == "affected_by_accident":
                 delay_xs.append(slot)
                 delay_ys.append(y)
+            elif action == "involved_in_accident":
+                delay_xs.append(slot)
+                delay_ys.append(y)
 
         # Past path (solid line)
         if past_xs:
@@ -441,6 +460,23 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
                 name=f"{tid} Delayed",
                 showlegend=False
             ))
+            
+        # Check if this train is currently blocked by accident
+        train_state = state.get(tid, {})
+        if train_state.get("status") == "blocked_by_accident":
+            blocked_until = train_state.get("accident_blocked_until", current_slot)
+            if current_slot is not None and current_slot < blocked_until:
+                pos = train_state.get("pos")
+                y_pos = pos[0] if isinstance(pos, tuple) and pos[0] != "Platform" else -1
+                fig.add_trace(go.Scatter(
+                    x=[current_slot], y=[y_pos],
+                    mode="markers+text",
+                    marker=dict(symbol="square", size=20, color="darkred", line=dict(color="black", width=2)),
+                    text=["🚫 BLOCKED"],
+                    textposition="top center",
+                    name=f"{tid} Blocked",
+                    showlegend=False
+                ))
 
     # Add current time marker if provided
     if current_slot is not None:
@@ -1157,6 +1193,11 @@ def plot_train_timeline(state, trains, accident_mgr=None):
                 marker_cols.append("orange")
                 marker_sizes.append(16)
                 texts.append("Rerouted!")
+            elif action == "involved_in_accident":
+                marker_syms.append("square")
+                marker_cols.append("darkred")
+                marker_sizes.append(18)
+                texts.append("🚫 BLOCKED")
             else:
                 marker_syms.append("circle")
                 marker_cols.append(color_map[tid])

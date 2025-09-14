@@ -9,6 +9,7 @@ class EmergencyEvent:
     location: object     # node (track,section) or train id
     start_time: int      # slot index
     duration_slots: int
+    involved_train: str = None  # The train involved in the accident
     info: dict = None
 
     @property
@@ -23,6 +24,7 @@ class AccidentManager:
         self.scheduled = []  # list of EmergencyEvent
         self.affected_trains = defaultdict(list)  # event_id -> list of affected trains
         self.rerouted_trains = defaultdict(list)  # event_id -> list of rerouted trains
+        self.involved_trains = defaultdict(str)  # event_id -> involved train id
         self.accident_stats = defaultdict(lambda: {
             "total_delay": 0,
             "trains_affected": 0,
@@ -57,6 +59,10 @@ class AccidentManager:
             self.rerouted_trains[event_id].append(train_id)
             self.accident_stats[event_id]["trains_rerouted"] += 1
             self.accident_stats[event_id]["total_delay"] += delay
+
+    def set_involved_train(self, event_id, train_id):
+        """Record the train involved in the accident"""
+        self.involved_trains[event_id] = train_id
 
     def blocked_nodes(self, slot_index):
         """Return set of blocked nodes at given slot index."""
