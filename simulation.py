@@ -152,17 +152,6 @@ class Simulator:
             nodes = self.acc.blocked_nodes(slot)
             for n in nodes:
                 s.add((n, slot))
-                # Also block adjacent sections for severe accidents
-                if isinstance(n, tuple) and n[0] != "Platform":
-                    track, section = n
-                    for active in self.acc.active_summary(slot):
-                        if active[2] == n and active[4].get("severity") == "high":
-                            # Block previous section
-                            if section > 0:
-                                s.add(((track, section-1), slot))
-                            # Block next section
-                            if section < 3:  # assuming 4 sections (0-3)
-                                s.add(((track, section+1), slot))
         return s
 
     def try_reserve(self, train_id, path, slots):
@@ -259,16 +248,13 @@ class Simulator:
                 if idx + 1 < len(st["planned_slots"]):
                     next_slot = st["planned_slots"][idx+1]
                     next_node = st["planned_path"][idx+1]
-                    # Enforce: if a section is blocked at next_slot, train must wait at least one slot before entering
-                    # If the section is newly blocked at next_slot, do not allow entry this slot
+                    # Enforce: if a section is blocked at next_slot, train must wait
+                    # NO TRAIN should ever enter a blocked section
                     if (next_node, next_slot) in blocked:
-                        # Only allow to move if the section was already blocked in the previous slot (i.e., not a new block)
-                        was_blocked_prev = (next_node, next_slot-1) in blocked
-                        if not was_blocked_prev:
-                            st["waiting_s"] += TIME_STEP_S
-                            st["log"].append((cur, st["pos"], st["pos"], "wait_blocked_new"))
-                            st["was_blocked"] = True
-                            continue
+                        st["waiting_s"] += TIME_STEP_S
+                        st["log"].append((cur, st["pos"], st["pos"], "wait_blocked_section"))
+                        st["was_blocked"] = True
+                        continue
                     reserved = self.res_table.get_reserved_trains(next_node, next_slot)
                     if reserved and st["info"].id not in reserved:
                         st["waiting_s"] += TIME_STEP_S
@@ -308,6 +294,7 @@ class Simulator:
                     # Accident duration ended, resume normal operation
                     st["status"] = "running"
                     st["log"].append((cur, st["pos"], st["pos"], "accident_resolved"))
+                    st["log"].append((cur, st["pos"], st["pos"], "resume"))
                     # Try to replan the route from current position
                     if not self.attempt_runtime_plan(t.id):
                         st["waiting_s"] += TIME_STEP_S
@@ -417,26 +404,33 @@ class Simulator:
                 self.acc.add_affected_train(current_event, involved_train, self.current_slot)
                 self.acc.set_involved_train(current_event, involved_train)
         
-        # Now identify other trains that need rerouting (those that would pass through the blocked section)
+        # Now identify other trains that need rerouting (those that would pass through the blocked track)
+        blocked_track = node[0] if isinstance(node, tuple) and node[0] != "Platform" else None
+        
         for tid, st in self.state.items():
             if st["status"] != "completed" and tid != involved_train:
                 path = st["planned_path"]
                 if not path:
                     continue
                     
-                # Check if train's path goes through the accident location
+                # Check if train's path goes through the blocked track
+                needs_reroute = False
                 for planned_node in path:
-                    if planned_node == node:
-                        affected_trains.append(tid)
-                        self.acc.add_affected_train(current_event, tid, self.current_slot)
-                        st["log"].append({
-                            "slot": self.current_slot,
-                            "action": "affected_by_accident",
-                            "node": node,
-                            "duration": duration,
-                            "event_id": current_event
-                        })
+                    if isinstance(planned_node, tuple) and planned_node[0] == blocked_track:
+                        needs_reroute = True
                         break
+                
+                if needs_reroute:
+                    affected_trains.append(tid)
+                    self.acc.add_affected_train(current_event, tid, self.current_slot)
+                    st["log"].append({
+                        "slot": self.current_slot,
+                        "action": "affected_by_accident",
+                        "node": node,
+                        "duration": duration,
+                        "event_id": current_event,
+                        "blocked_track": blocked_track
+                    })
         
         # Try to reroute each affected train (excluding the involved train)
         rerouted = 0

@@ -8,6 +8,82 @@ from data import build_graph, generate_fixed_trains
 from accident_manager import EmergencyEvent, AccidentManager
 from simulation import Simulator
 from visualization import plot_track_timeline, plot_gantt_chart, plot_train_timeline
+from utils import format_node
+
+def generate_accident_log(accident_mgr, current_slot):
+    """Generate comprehensive accident log HTML"""
+    log_entries = []
+    
+    # Add prescheduled accidents
+    for event in accident_mgr.scheduled:
+        status = "🟢 ACTIVE" if event.is_active_slot(current_slot) else "⏳ SCHEDULED"
+        if event.start_time > current_slot:
+            status = "📅 FUTURE"
+        elif event.end_time <= current_slot:
+            status = "✅ RESOLVED"
+            
+        involved_train = accident_mgr.involved_trains.get(event.event_id, "None")
+        affected_count = len(accident_mgr.affected_trains.get(event.event_id, []))
+        rerouted_count = len(accident_mgr.rerouted_trains.get(event.event_id, []))
+        
+        log_entries.append(html.Div([
+            html.Strong(f"🚨 {event.event_id} - {event.ev_type.upper()}"),
+            html.Br(),
+            f"📍 Location: {format_node(event.location)}",
+            html.Br(),
+            f"⏰ Start: Slot {event.start_time} | Duration: {event.duration_slots} slots",
+            html.Br(),
+            f"🚂 Involved: {involved_train} | Affected: {affected_count} | Rerouted: {rerouted_count}",
+            html.Br(),
+            f"📊 Status: {status}",
+            html.Hr(style={"margin": "5px 0"})
+        ], style={"margin-bottom": "10px", "padding": "8px", "background-color": "white", "border-radius": "3px"}))
+    
+    if not log_entries:
+        log_entries.append(html.Div("✅ No accidents scheduled or active", 
+                                  style={"text-align": "center", "color": "green", "font-style": "italic"}))
+    
+    return log_entries
+
+def generate_system_stats(state, trains, accident_mgr, current_slot):
+    """Generate system statistics HTML"""
+    completed_trains = len([t for t in trains if state.get(t.id, {}).get("status") == "completed"])
+    blocked_trains = len([t for t in trains if state.get(t.id, {}).get("status") == "blocked_by_accident"])
+    running_trains = len([t for t in trains if state.get(t.id, {}).get("status") == "running"])
+    not_arrived = len([t for t in trains if state.get(t.id, {}).get("status") == "not_arrived"])
+    
+    # Calculate delays and reroutes
+    total_delays = 0
+    total_reroutes = 0
+    for train in trains:
+        train_state = state.get(train.id, {})
+        total_delays += train_state.get("waiting_s", 0) / 60  # Convert to minutes
+        # Count reroutes from log
+        for log_entry in train_state.get("log", []):
+            if isinstance(log_entry, tuple) and len(log_entry) >= 4 and log_entry[3] == "runtime_plan":
+                total_reroutes += 1
+    
+    active_accidents = len([e for e in accident_mgr.scheduled if e.is_active_slot(current_slot)])
+    
+    stats_html = [
+        html.H5("🚂 Train Status", className="mb-2"),
+        html.P(f"✅ Completed: {completed_trains}/{len(trains)}"),
+        html.P(f"🚫 Blocked: {blocked_trains}"),
+        html.P(f"🚂 Running: {running_trains}"),
+        html.P(f"⏳ Not Arrived: {not_arrived}"),
+        html.Hr(),
+        html.H5("📊 Performance Metrics", className="mb-2"),
+        html.P(f"⏱️ Total Delays: {total_delays:.1f} minutes"),
+        html.P(f"🔄 Total Reroutes: {total_reroutes}"),
+        html.P(f"🚨 Active Accidents: {active_accidents}"),
+        html.P(f"📈 Completion Rate: {(completed_trains/len(trains)*100):.1f}%"),
+        html.Hr(),
+        html.H5("⏰ System Time", className="mb-2"),
+        html.P(f"Current Slot: {current_slot}"),
+        html.P(f"Time: {current_slot} minutes")
+    ]
+    
+    return stats_html
 
 # Build infrastructure + trains
 NUM_TRACKS = 5
@@ -63,6 +139,29 @@ app.layout = dbc.Container([
     dcc.Graph(id="track-timeline-graph"),
     dcc.Graph(id="timeline-graph"),
     dcc.Graph(id="gantt-graph"),
+    dbc.Row([
+        dbc.Col([
+            html.H4("🚨 Accident Log", className="mb-3"),
+            html.Div(id="accident-log", style={
+                "height": "300px", 
+                "overflow-y": "auto", 
+                "border": "1px solid #ddd", 
+                "padding": "10px",
+                "background-color": "#f8f9fa",
+                "border-radius": "5px"
+            })
+        ], width=6),
+        dbc.Col([
+            html.H4("📊 System Statistics", className="mb-3"),
+            html.Div(id="system-stats", style={
+                "height": "300px", 
+                "border": "1px solid #ddd", 
+                "padding": "10px",
+                "background-color": "#f8f9fa",
+                "border-radius": "5px"
+            })
+        ], width=6)
+    ], className="mt-4"),
     dcc.Interval(id="interval", interval=1000, n_intervals=0, disabled=True),
     html.Div(id="sim-status", style={"marginTop": "10px"}),
 ], fluid=True)
@@ -88,6 +187,8 @@ def run_pause(run_clicks, pause_clicks, is_disabled):
     Output("timeline-graph", "figure"),
     Output("gantt-graph", "figure"),
     Output("sim-status", "children"),
+    Output("accident-log", "children"),
+    Output("system-stats", "children"),
     Input("step-btn", "n_clicks"),
     Input("interval", "n_intervals"),
     Input("trigger-acc", "n_clicks"),
@@ -151,7 +252,14 @@ def control(step_clicks, n_intervals, trigger_clicks, reset_clicks, acc_track, a
     track_fig = plot_track_timeline(sim.state, trains, accident_mgr=acc_mgr, current_slot=sim.current_slot)
     timeline_fig = plot_train_timeline(sim.state, trains, accident_mgr=acc_mgr)
     gantt_fig = plot_gantt_chart(sim.state, trains, accident_mgr=acc_mgr, current_slot=sim.current_slot)
-    return track_fig, timeline_fig, gantt_fig, status
+    
+    # Generate accident log
+    accident_log = generate_accident_log(acc_mgr, sim.current_slot)
+    
+    # Generate system statistics
+    system_stats = generate_system_stats(sim.state, trains, acc_mgr, sim.current_slot)
+    
+    return track_fig, timeline_fig, gantt_fig, status, accident_log, system_stats
 
 if __name__ == "__main__":
     app.run(debug=True)

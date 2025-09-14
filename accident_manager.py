@@ -70,16 +70,15 @@ class AccidentManager:
         for e in self.scheduled:
             if e.is_active_slot(slot_index):
                 if e.ev_type in ("accident", "breakdown", "signal"):
-                    blocked.add(e.location)
-                    # Also block adjacent nodes if it's a major accident
-                    if e.info and e.info.get("severity") == "high":
-                        if isinstance(e.location, tuple) and e.location[0] != "Platform":
-                            track, section = e.location
-                            # Block adjacent sections on same track
-                            if section > 0:
-                                blocked.add((track, section - 1))
-                            if section < 3:  # assuming 4 sections (0-3)
-                                blocked.add((track, section + 1))
+                    if isinstance(e.location, tuple) and e.location[0] != "Platform":
+                        # Block the ENTIRE track where the accident occurs
+                        track, section = e.location
+                        # Block all sections on the same track
+                        for sec in range(4):  # assuming 4 sections (0-3)
+                            blocked.add((track, sec))
+                    else:
+                        # For platform accidents, just block the platform
+                        blocked.add(e.location)
         return blocked
 
     def active_summary(self, slot_index):
