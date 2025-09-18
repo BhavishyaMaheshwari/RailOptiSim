@@ -39,6 +39,12 @@ class AccidentManager:
             "severity_level": "normal",
             "impact_radius": 0
         })
+        # Network config (for blocking whole tracks)
+        self.sections_per_track = 4
+
+    def set_network(self, sections_per_track: int):
+        """Set network configuration for accident effects."""
+        self.sections_per_track = max(1, int(sections_per_track))
 
     def schedule(self, event: EmergencyEvent):
         """
@@ -91,7 +97,7 @@ class AccidentManager:
                         # Block the ENTIRE track where the accident occurs
                         track, section = e.location
                         # Block all sections on the same track
-                        for sec in range(4):  # assuming 4 sections (0-3)
+                        for sec in range(self.sections_per_track):
                             blocked.add((track, sec))
                     else:
                         # For platform accidents, just block the platform

@@ -65,10 +65,18 @@ def dijkstra_dynamic(G, source, target, start_slot, res_table, blocked_pairs):
     dist = {(source, start_slot): 0}
     parent = {}
 
+    def is_goal(node):
+        # target can be a single node or a collection
+        if target is None:
+            return False
+        if isinstance(target, (set, list, tuple)):
+            return node in set(target)
+        return node == target
+
     while pq:
         g, _, u, slot, p = heapq.heappop(pq)
 
-        if u == target:
+        if is_goal(u):
             # reconstruct path
             path = []
             cur = (u, slot)
@@ -116,16 +124,18 @@ def dijkstra_dynamic(G, source, target, start_slot, res_table, blocked_pairs):
 
 
 class Simulator:
-    def __init__(self, graph, platform_node, trains, accident_mgr: AccidentManager,
-                 horizon_minutes=60):
+    def __init__(self, graph, platform_nodes, trains, accident_mgr: AccidentManager,
+                 horizon_minutes=60, platform_capacity=PLATFORM_CAPACITY, **kwargs):
         self.G = graph
-        self.platform = platform_node
+        # Multiple platforms supported
+        self.platform_nodes = list(platform_nodes) if isinstance(platform_nodes, (list, tuple, set)) else [platform_nodes]
         self.trains = deepcopy(trains)
         self.acc = accident_mgr
         self.current_slot = 0
         self.horizon_slots = int(math.ceil(horizon_minutes))
         nodes = list(self.G.nodes())
-        caps = {self.platform: PLATFORM_CAPACITY}
+        # Per-platform capacity map
+        caps = {p: platform_capacity for p in self.platform_nodes}
         self.res_table = NodeReservationTable(nodes, self.horizon_slots, capacities=caps)
 
         # state: per train
@@ -143,6 +153,9 @@ class Simulator:
                 "switches": 0
             }
         self.usage = defaultdict(int)
+
+    def is_platform_node(self, node):
+        return isinstance(node, tuple) and len(node) >= 1 and node[0] == "Platform"
 
     def blocked_set(self):
         """Returns set of (node, slot) tuples that are blocked"""
@@ -169,18 +182,25 @@ class Simulator:
                 others = [tid for tid in self.res_table.get_reserved_trains(node, s) if tid != train_id]
                 if others:
                     return False
-            # No call to self.res_table.blocked_set() here
             to_commit.append((node, slot))
         for node, slot in to_commit:
             self.res_table.reserve(node, slot, train_id)
         return True
+
+    def _targets_for_train(self, train_info):
+        # If goal is a platform node, go there; otherwise route to any platform
+        goal = train_info.goal
+        if self.is_platform_node(goal):
+            return {goal}
+        return set(self.platform_nodes)
 
     def plan_initial(self):
         for t in self.trains:
             st = self.state[t.id]
             start_slot = max(self.current_slot, int(t.sched_arrival))
             blocked_pairs = self.blocked_set()
-            path, slots = dijkstra_dynamic(self.G, t.start, t.goal, start_slot, self.res_table, blocked_pairs)
+            targets = self._targets_for_train(t)
+            path, slots = dijkstra_dynamic(self.G, t.start, targets, start_slot, self.res_table, blocked_pairs)
             if path and slots:
                 ok = self.try_reserve(t.id, path, slots)
                 if ok:
@@ -196,7 +216,8 @@ class Simulator:
         info = st["info"]
         start_node = st["pos"] if st["pos"] else info.start
         start_slot = max(self.current_slot, st["slot"] if st["slot"] is not None else self.current_slot)
-        path, slots = dijkstra_dynamic(self.G, start_node, info.goal, start_slot, self.res_table, self.blocked_set())
+        targets = self._targets_for_train(info)
+        path, slots = dijkstra_dynamic(self.G, start_node, targets, start_slot, self.res_table, self.blocked_set())
         if path and slots and self.try_reserve(tid, path, slots):
             st["planned_path"] = path
             st["planned_slots"] = slots
@@ -249,7 +270,6 @@ class Simulator:
                     next_slot = st["planned_slots"][idx+1]
                     next_node = st["planned_path"][idx+1]
                     # Enforce: if a section is blocked at next_slot, train must wait
-                    # NO TRAIN should ever enter a blocked section
                     if (next_node, next_slot) in blocked:
                         st["waiting_s"] += TIME_STEP_S
                         st["log"].append((cur, st["pos"], st["pos"], "wait_blocked_section"))
@@ -271,13 +291,14 @@ class Simulator:
                     if st.get("was_blocked", False):
                         st["log"].append((next_slot, prev, next_node, "resume"))
                         st["was_blocked"] = False
-                    if next_node == self.platform:
+                    # Any platform node completes the trip after dwell
+                    if self.is_platform_node(next_node):
                         st["status"] = "at_platform"
                         dwell_slots = secs_to_slots(getattr(info, "dwell", DWELL_DEFAULT_S))
                         st["platform_end_slot"] = next_slot + dwell_slots
                         st["log"].append((next_slot, next_node, None, f"platform_until_{st['platform_end_slot']}"))
                 else:
-                    if st["pos"] == info.goal:
+                    if self.is_platform_node(st["pos"]):
                         st["status"] = "completed"
                         st["log"].append((cur, st["pos"], None, "completed"))
                     else:
@@ -287,20 +308,17 @@ class Simulator:
             elif st["status"] == "at_platform":
                 if st.get("platform_end_slot", 0) <= cur:
                     st["status"] = "completed"
-                    st["log"].append((cur, self.platform, None, "depart"))
+                    st["log"].append((cur, st["pos"], None, "depart"))
             elif st["status"] == "blocked_by_accident":
                 # Train is blocked due to accident - check if accident duration has ended
                 if st.get("accident_blocked_until", 0) <= cur:
-                    # Accident duration ended, resume normal operation
                     st["status"] = "running"
                     st["log"].append((cur, st["pos"], st["pos"], "accident_resolved"))
                     st["log"].append((cur, st["pos"], st["pos"], "resume"))
-                    # Try to replan the route from current position
                     if not self.attempt_runtime_plan(t.id):
                         st["waiting_s"] += TIME_STEP_S
                         st["log"].append((cur, st["pos"], st["pos"], "wait_noplan_after_accident"))
                 else:
-                    # Still blocked by accident
                     st["waiting_s"] += TIME_STEP_S
                     st["log"].append((cur, st["pos"], st["pos"], "blocked_by_accident"))
         self.current_slot += 1
