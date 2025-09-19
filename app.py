@@ -934,7 +934,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
     timeline_fig = plot_train_timeline(filtered_state, filtered_trains, accident_mgr=acc_mgr)
     gantt_fig = plot_gantt_chart(filtered_state, filtered_trains, accident_mgr=acc_mgr, current_slot=sim.current_slot)
 
-    # Platform view
+    # Platform view: grid (small multiples) or combined (stacked); fall back to Stops Comparator if empty
     # Parse platform_filter values back to tuples
     selected_platforms = None
     if platform_filter:
@@ -942,8 +942,17 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
             selected_platforms = [ast.literal_eval(p) for p in platform_filter]
         except Exception:
             selected_platforms = None
-    # Replace occupancy with Stops Comparator (expected vs actual)
-    station_fig = plot_stops_schedule(filtered_state, selected_platforms, current_slot=sim.current_slot)
+
+    if platform_view == "grid":
+        # Show small-multiples per selected platforms (or top active if none selected)
+        from visualization import plot_station_overview, plot_station_overview_combined
+        station_fig = plot_station_overview(filtered_state, platforms=selected_platforms, current_slot=sim.current_slot)
+    elif platform_view == "combined":
+        from visualization import plot_station_overview_combined
+        station_fig = plot_station_overview_combined(filtered_state, selected_platforms, current_slot=sim.current_slot)
+    else:
+        # Fallback to stops comparator
+        station_fig = plot_stops_schedule(filtered_state, selected_platforms, current_slot=sim.current_slot)
 
     # Network map view
     network_fig = plot_network_map(G, filtered_state, PLATFORMS, current_slot=sim.current_slot, accident_mgr=acc_mgr)

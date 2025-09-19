@@ -514,13 +514,19 @@ def plot_network_map(G, state, platforms, current_slot=None, accident_mgr=None, 
         # Determine start index near current_slot
         start_idx = 0
         if current_slot is not None and slots:
+            found = False
             for i, sl in enumerate(slots):
                 if sl >= current_slot:
                     start_idx = max(0, i - 1)  # include one past node
+                    found = True
                     break
+            if not found:
+                start_idx = max(0, len(slots) - 2)
+
         future_nodes = path_nodes[start_idx:start_idx + lookahead_slots]
-        xs, ys = [], []
-        for n in future_nodes:
+        future_slots = slots[start_idx:start_idx + lookahead_slots] if slots else []
+        xs, ys, hover_texts = [], [], []
+        for n, s in zip(future_nodes, future_slots if future_slots else [None]*len(future_nodes)):
             if isinstance(n, tuple) and n and n[0] == "Platform":
                 x, y = plat_pos.get(n, (x_plat, num_tracks/2.0))
             elif isinstance(n, tuple):
@@ -530,13 +536,19 @@ def plot_network_map(G, state, platforms, current_slot=None, accident_mgr=None, 
             if x is not None:
                 xs.append(x)
                 ys.append(y)
+                node_label = format_node(n) if isinstance(n, tuple) else str(n)
+                if s is not None:
+                    hover_texts.append(f"<b>{tid}</b><br>Next: {node_label}<br>ETA: {int(s)}")
+                else:
+                    hover_texts.append(f"<b>{tid}</b><br>Next: {node_label}")
         if xs:
             fig.add_trace(go.Scatter(
                 x=xs, y=ys, mode="lines+markers",
                 line=dict(color=color_map[tid], width=4, shape="spline", smoothing=1.3),
                 marker=dict(size=10, color=color_map[tid]),
                 name=tid,
-                hovertemplate=f"<b>{tid}</b><extra></extra>"
+                text=hover_texts,
+                hovertemplate="%{text}<extra></extra>"
             ))
 
         # Current position marker
@@ -548,13 +560,31 @@ def plot_network_map(G, state, platforms, current_slot=None, accident_mgr=None, 
         else:
             x, y = (None, None)
         if x is not None:
+            # Determine next stop & ETA for hover
+            next_stop = None
+            next_eta = None
+            if path_nodes and slots:
+                for n, s in zip(path_nodes, slots):
+                    if current_slot is None or s >= current_slot:
+                        next_stop = n; next_eta = s; break
+            next_label = format_node(next_stop) if isinstance(next_stop, tuple) else (str(next_stop) if next_stop is not None else "N/A")
+            status = st.get("status", "unknown")
             fig.add_trace(go.Scatter(
                 x=[x], y=[y], mode="markers+text",
                 marker=dict(size=16, color=color_map[tid], line=dict(width=2, color="#2C3E50")),
-                text=["🚂"], textposition="bottom center",
+                text=[f"🚂 {tid}"], textposition="top center",
                 name=f"{tid} (now)", showlegend=False,
-                hovertemplate=f"<b>{tid}</b> (current)<extra></extra>"
+                hovertemplate=f"<b>{tid}</b><br>Status: {status}<br>Pos: {format_node(cur)}<br>Next: {next_label}<br>ETA: {int(next_eta) if next_eta is not None else 'N/A'}<extra></extra>"
             ))
+
+            # Highlight if blocked
+            if st.get("status") == "blocked_by_accident":
+                fig.add_trace(go.Scatter(
+                    x=[x], y=[y], mode="markers",
+                    marker=dict(size=22, symbol="circle-open", line=dict(width=3, color="#E74C3C")),
+                    name="Blocked", showlegend=False,
+                    hoverinfo="skip"
+                ))
 
     # Accident overlays
     if accident_mgr is not None and current_slot is not None:
@@ -576,7 +606,7 @@ def plot_network_map(G, state, platforms, current_slot=None, accident_mgr=None, 
 
     # Layout styling
     fig.update_layout(
-        title=dict(text="🗺️ Network Map (curved jumps & live paths)", x=0.5, font=dict(size=18)),
+        title=dict(text=f"🗺️ Network Map — live paths{' | Slot ' + str(current_slot) if current_slot is not None else ''}", x=0.5, font=dict(size=18)),
         xaxis=dict(visible=False), yaxis=dict(visible=False),
         height=600, width=1400, showlegend=True,
         margin=dict(l=40, r=40, t=60, b=40),
@@ -793,7 +823,7 @@ def plot_train_timeline(state, trains, accident_mgr=None):
     
     return fig
 
-def plot_station_overview_combined(state, selected_platforms, current_slot=None):
+def plot_station_overview_combined(state, selected_platforms=None, current_slot=None):
     """
     Combined platform occupancy view.
     Stacks bars per slot by platform to see multiple platforms together.
@@ -809,9 +839,13 @@ def plot_station_overview_combined(state, selected_platforms, current_slot=None)
     if df.empty:
         fig = go.Figure(); fig.update_layout(title="No platform activity detected"); return fig
 
-    # Filter platforms
+    # Filter platforms or pick top N if none provided
     if selected_platforms:
-        df = df[df["platform"].isin(set(selected_platforms))]
+        sel = set(selected_platforms)
+        df = df[df["platform"].isin(sel)]
+    else:
+        top_counts = df.groupby("platform").size().sort_values(ascending=False)
+        df = df[df["platform"].isin(set(top_counts.head(10).index))]
     plat_values = sorted(df["platform"].unique(), key=lambda p: (p[1], p[2]))
 
     # Count trains per platform per slot
@@ -834,12 +868,15 @@ def plot_station_overview_combined(state, selected_platforms, current_slot=None)
 
     fig.update_layout(
         barmode="stack",
-        title=dict(text="🚉 Combined Platform Occupancy", x=0.5, font=dict(size=16)),
-        height=500,
-        width=1200,
+        title=dict(text="🚉 Combined Platform Activity", x=0.5, font=dict(size=18)),
+        height=550,
+        width=1400,
         legend=dict(orientation="h", y=-0.2),
         xaxis_title="Time (slots)",
-        yaxis_title="Train count"
+        yaxis_title="Train count",
+        bargap=0.1,
+        plot_bgcolor="#FBFCFC",
+        paper_bgcolor="#FFFFFF",
     )
 
     if current_slot is not None:
@@ -1002,7 +1039,7 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     
     return fig
 
-def plot_station_overview(state, platforms, current_slot=None):
+def plot_station_overview(state, platforms=None, current_slot=None):
     """
     Multi-platform occupancy overview with enhanced visualization.
     """
@@ -1021,14 +1058,18 @@ def plot_station_overview(state, platforms, current_slot=None):
         fig.update_layout(title="No platform activity detected")
         return fig
     
-    # Create subplots for each platform
-    plat_order = [p for p in platforms if p in set(df["platform"])]
+    # Choose platforms: if explicit, use intersection; else pick top active by train count
+    if platforms:
+        plat_order = [p for p in platforms if p in set(df["platform"])]
+    else:
+        top_counts = df.groupby("platform").size().sort_values(ascending=False)
+        plat_order = list(top_counts.head(6).index)  # cap at 6 for readability
     if not plat_order:
         fig = go.Figure()
         fig.update_layout(title="No active platforms")
         return fig
     
-    cols = min(3, len(plat_order))  # Max 3 columns
+    cols = min(3, len(plat_order))  # Up to 3 columns
     rows_needed = (len(plat_order) + cols - 1) // cols
     
     fig = make_subplots(
@@ -1050,7 +1091,7 @@ def plot_station_overview(state, platforms, current_slot=None):
             go.Bar(
                 x=slot_counts.index,
                 y=slot_counts.values,
-                marker=dict(color="#FFD700", line=dict(color="#B8860B", width=1)),
+                marker=dict(color="#F1C40F", line=dict(color="#7D6608", width=1)),
                 name=format_node(p),
                 showlegend=False,
                 hovertemplate=f"{format_node(p)}<br>Trains: %{{y}}<br>Slot: %{{x}}<extra></extra>"
@@ -1068,18 +1109,21 @@ def plot_station_overview(state, platforms, current_slot=None):
             )
     
     fig.update_layout(
-        height=300 * rows_needed,
-        width=1200,
+        height=max(300, 300 * rows_needed),
+        width=1400,
         title=dict(
-            text="🚉 PLATFORM OCCUPANCY OVERVIEW",
+            text="🚉 Platform Activity — top active platforms first",
             x=0.5,
-            font=dict(size=16)
+            font=dict(size=18)
         ),
-        showlegend=False
+        showlegend=False,
+        bargap=0.15,
+        plot_bgcolor="#FBFCFC",
+        paper_bgcolor="#FFFFFF",
     )
     
-    fig.update_xaxes(title_text="Time (slots)")
-    fig.update_yaxes(title_text="Trains")
+    fig.update_xaxes(title_text="Time (slots)", showgrid=True, gridcolor='rgba(128,128,128,0.15)')
+    fig.update_yaxes(title_text="Trains", rangemode="tozero")
     
     return fig
 
