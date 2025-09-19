@@ -18,6 +18,8 @@ Version: 2.0 Professional Edition
 
 import dash
 import ast
+import json
+import os
 from dash import dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 import uuid
@@ -250,6 +252,7 @@ SECTIONS = 4            # Number of sections per track
 NUM_STATIONS = 2        # Number of stations
 PLATFORMS_PER_STATION = 16  # Platforms per station (total = 32)
 HORIZON_MINUTES = 20    # Simulation planning horizon in minutes
+CURRENT_SECTIONS = SECTIONS  # Track current sections after dataset loads
 
 # Constrained platform access (richer mapping): each track connects to up to 4 platforms per station
 PLATFORM_ACCESS_MAP = {}
@@ -262,8 +265,8 @@ for tr in range(NUM_TRACKS):
             choices.append((st, pf))
     PLATFORM_ACCESS_MAP[tr] = choices
 
-# Build the railway infrastructure graph
 print("🚂 Initializing Railway Infrastructure...")
+# Build demo graph only (no external JSONs)
 G, PLATFORMS = build_graph(
     num_tracks=NUM_TRACKS,
     sections_per_track=SECTIONS,
@@ -271,18 +274,14 @@ G, PLATFORMS = build_graph(
     platforms_per_station=PLATFORMS_PER_STATION,
     platform_access_map=PLATFORM_ACCESS_MAP
 )
-print(f"✅ Railway network built: {NUM_TRACKS} tracks × {SECTIONS} sections + {NUM_STATIONS} stations × {PLATFORMS_PER_STATION} platforms")
-
-# Generate the train fleet
-print("🚂 Generating Train Fleet...")
 trains = generate_fixed_trains(sections_per_track=SECTIONS)
-print(f"✅ {len(trains)} trains generated and ready for deployment")
+print(f"✅ Demo network built: {NUM_TRACKS} tracks × {SECTIONS} sections + {NUM_STATIONS} stations × {PLATFORMS_PER_STATION} platforms")
 
 # Initialize the accident management system
 print("🚨 Initializing Emergency Management System...")
 acc_mgr = AccidentManager()
 # Configure accident manager with network parameters
-acc_mgr.set_network(sections_per_track=SECTIONS)
+acc_mgr.set_network(sections_per_track=CURRENT_SECTIONS)
 print("✅ Emergency response system online")
 
 # Initialize the simulation engine
@@ -347,6 +346,7 @@ app.layout = dbc.Container([
                    style={"fontStyle": "italic", "color": "#E74C3C", "fontWeight": "bold"}),
         ])
     ], className="mb-4"),
+    # Removed dataset ingestion UI
     dbc.Card([
         dbc.CardBody([
             html.H5("� One-Click Demos & Presets", className="card-title mb-3"),
@@ -569,6 +569,7 @@ app.layout = dbc.Container([
         "toImageButtonOptions": {"format": "png", "scale": 3},
         "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
     }),
+    # Removed geographic corridor graph
     dbc.Card([
         dbc.CardBody([
             html.H5("🧭 What am I looking at? (Network Map)", className="card-title mb-2"),
@@ -638,6 +639,7 @@ app.layout = dbc.Container([
             html.Div(id="ai-summary")
         ])
     ], className="mt-3"),
+    # Removed dataset-loaded store
     dbc.Card([
         dbc.CardBody([
             html.H5("🗣️ Plain English Summary", className="card-title mb-3"),
@@ -715,7 +717,7 @@ def run_pause(run_clicks, pause_clicks, is_disabled):
     State("scenario-preset", "value"),
 )
 def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, trigger_breakdown_clicks, reset_clicks, apply_preset_clicks, guided_demo_clicks, train_filter, platform_filter, platform_view, hd_mode, dark_mode, simple_mode, acc_track, acc_section, acc_duration, platform_nodes, platform_acc_duration, breakdown_train, breakdown_duration, scenario_value):
-    global sim, acc_mgr
+    global G, PLATFORMS, trains, acc_mgr, sim, GEO_PATH, STATION_POSITIONS, CURRENT_SECTIONS
     ctx = dash.callback_context
     trig = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
     status = "Idle"
@@ -723,7 +725,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
     if trig == "reset-btn":
         # rebuild sim
         acc_mgr = AccidentManager()
-        acc_mgr.set_network(sections_per_track=SECTIONS)
+        acc_mgr.set_network(sections_per_track=CURRENT_SECTIONS)
         sim = Simulator(
             graph=G,
             platform_nodes=PLATFORMS,
@@ -744,8 +746,8 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
             # Validate inputs
             if not (0 <= acc_track < NUM_TRACKS):
                 raise ValueError(f"Track index must be between 0 and {NUM_TRACKS-1}")
-            if not (0 <= acc_section < SECTIONS):
-                raise ValueError(f"Section index must be between 0 and {SECTIONS-1}")
+            if not (0 <= acc_section < CURRENT_SECTIONS):
+                raise ValueError(f"Section index must be between 0 and {CURRENT_SECTIONS-1}")
             if not (1 <= duration <= 120):
                 raise ValueError("Duration must be between 1 and 120 slots")
                 
@@ -917,6 +919,9 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
             status = "🎬 Guided demo queued: breakdown now, track accident in +2, station block in +4."
         except Exception as e:
             status = f"⚠️ Failed to queue guided demo: {str(e)}"
+    elif trig == "unused":
+        pass
+    
     elif trig == "step-btn" or trig == "interval":
         sim.step_slot()
         status = f"Advanced to slot {sim.current_slot}"
@@ -956,6 +961,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
 
     # Network map view
     network_fig = plot_network_map(G, filtered_state, PLATFORMS, current_slot=sim.current_slot, accident_mgr=acc_mgr)
+    # Removed geo figure
 
     # Apply HD enhancements if enabled
     scale = 1.3 if (isinstance(hd_mode, list) and "hd" in hd_mode) else 1.0
@@ -997,6 +1003,8 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
     ]
 
     return track_fig, timeline_fig, gantt_fig, station_fig, network_fig, track_style, timeline_style, status, accident_log, system_stats, ai_summary, ops_log, plain
+
+# Removed dataset-related callbacks and dynamic section max
 
 # Speed slider -> set interval period (ms). 1× = 1000ms per tick
 @app.callback(Output("interval", "interval"), Input("sim-speed", "value"))

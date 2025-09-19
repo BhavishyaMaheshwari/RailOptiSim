@@ -1246,3 +1246,25 @@ def plot_stops_schedule(state, platforms=None, current_slot=None):
     if current_slot is not None:
         fig.add_vline(x=int(current_slot), line_color="red", line_width=2)
     return fig
+
+def plot_geo_corridor(path_lonlat, station_positions=None, station_labels=None, trains=None, state=None, current_slot=None):
+    """Geographic corridor view: draws the rail polyline and station points.
+    Optionally labels stations with codes; future work can project trains.
+    """
+    import plotly.graph_objs as go
+    if not path_lonlat:
+        fig = go.Figure()
+        fig.update_layout(title="Assam Corridor (no geojson)")
+        return fig
+    xs = [p[0] for p in path_lonlat]
+    ys = [p[1] for p in path_lonlat]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", line=dict(color="#888", width=2), name="Rail Corridor"))
+    if station_positions:
+        sx = [p[0] for p in station_positions]
+        sy = [p[1] for p in station_positions]
+        labels = station_labels or [f"S{i+1}" for i in range(len(station_positions))]
+        fig.add_trace(go.Scatter(x=sx, y=sy, mode="markers+text", text=labels, textposition="top center", marker=dict(color="#FFD700", size=8, line=dict(color="#333", width=1)), name="Stations"))
+    fig.update_layout(title="Assam Geographic Corridor", xaxis_title="Longitude", yaxis_title="Latitude", template="plotly_white", height=500)
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    return fig

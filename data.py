@@ -7,9 +7,17 @@ Train = namedtuple("Train", ["id", "type", "priority", "start", "goal", "sched_a
 
 PRIORITY_MAP = {"Express": 0, "Passenger": 1, "Freight": 2}  # lower number = higher priority
 
-def build_graph(num_tracks=5, sections_per_track=4, num_stations=1, platforms_per_station=1, platform_access_map=None):
+def build_graph(num_tracks=5, sections_per_track=4, num_stations=1, platforms_per_station=1, platform_access_map=None, station_section_map=None):
     """
     Build directed graph of tracks & sections with enhanced platform access control.
+    
+    Args:
+        num_tracks: number of parallel tracks
+        sections_per_track: sections along each track
+        num_stations: station count
+        platforms_per_station: number of platforms per station
+        platform_access_map: dict[int track] -> list[(station_id, platform_id)] mapping which platforms a track can access
+        station_section_map: optional dict[int station_id] -> int section_index to attach platforms near that section
     """
     G = nx.DiGraph()
 
@@ -37,19 +45,21 @@ def build_graph(num_tracks=5, sections_per_track=4, num_stations=1, platforms_pe
             G.add_edge((tr, sec), (tr + 1, sec), travel=0.5)
             G.add_edge((tr + 1, sec), (tr, sec), travel=0.5)
 
-    # connect last sections to station platforms with access constraints
+    # connect sections to station platforms with access constraints
     # platform_access_map: dict[int track] -> list[(station_id, platform_id)]
     for tr in range(num_tracks):
-        last = (tr, sections_per_track - 1)
+        # default attachment section is last section unless station_section_map overrides
         if platform_access_map and tr in platform_access_map:
             for (st, pf) in platform_access_map[tr]:
                 if 0 <= st < num_stations and 0 <= pf < platforms_per_station:
-                    G.add_edge(last, ("Platform", st, pf), travel=0.5)
+                    sec = int(station_section_map.get(st, sections_per_track - 1)) if station_section_map else (sections_per_track - 1)
+                    G.add_edge((tr, sec), ("Platform", st, pf), travel=0.5)
         else:
             # More realistic fallback: not all tracks connect to all platforms
             st = tr % max(1, num_stations)
             pf = tr % max(1, platforms_per_station)
-            G.add_edge(last, ("Platform", st, pf), travel=0.5)
+            sec = int(station_section_map.get(st, sections_per_track - 1)) if station_section_map else (sections_per_track - 1)
+            G.add_edge((tr, sec), ("Platform", st, pf), travel=0.5)
 
     return G, platforms
 
