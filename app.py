@@ -31,6 +31,7 @@ from simulation import Simulator
 from visualization import (
     plot_gantt_chart,
     plot_train_timeline,
+    plot_track_timeline,
     plot_network_map,
     enhance_for_hd,
     plot_stops_schedule,
@@ -475,7 +476,7 @@ print("✅ All trains have optimized routes planned")
 print("🚀 RailOptimusSim is ready for operation!")
 
 # Maintain last 10 simulation snapshots for quick history view
-SIM_HISTORY = []  # entries: {"ts": int_slot, "completed": int, "total": int, "total_delay_min": float, "avg_delay_min": float, "incidents": int, "ops": list[dict]}
+SIM_HISTORY = []  # entries: {"ts": int_slot, "wall_time": ISO-8601 str, "completed": int, "total": int, "total_delay_min": float, "avg_delay_min": float, "incidents": int, "ops": list[dict]}
 
 # =============================================================================
 # WEB APPLICATION INITIALIZATION - PROFESSIONAL DASHBOARD SETUP
@@ -706,10 +707,10 @@ app.layout = dbc.Container([
                     dcc.RadioItems(
                         id="platform-view-mode",
                         options=[
-                            {"label": "Matrix (Platform × Train)", "value": "matrix"},
+                            {"label": "Scatter (Platform × Train)", "value": "scatter"},
                             {"label": "Combined (stacked)", "value": "combined"},
                         ],
-                        value="matrix",
+                        value="scatter",
                         labelStyle={"display": "block"}
                     )
                 ], width=3)
@@ -780,6 +781,11 @@ app.layout = dbc.Container([
         "toImageButtonOptions": {"format": "png", "scale": 3},
         "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
     }),
+    dcc.Graph(id="platform-train-scatter", config={
+        "displaylogo": False,
+        "toImageButtonOptions": {"format": "png", "scale": 3},
+        "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
+    }),
     # Human-friendly alternatives
     dcc.Graph(id="stops-graph", config={
         "displaylogo": False,
@@ -799,7 +805,9 @@ app.layout = dbc.Container([
                 "displaylogo": False,
                 "toImageButtonOptions": {"format": "png", "scale": 3},
                 "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
-            })
+            }),
+            dbc.Button("Download Last 10 (CSV)", id="download-history-list-btn", color="secondary", size="sm", className="mt-2"),
+            dcc.Download(id="download-history-list")
         ])
     ], className="mt-3"),
     # Removed geographic corridor graph
@@ -952,6 +960,7 @@ def run_pause(run_clicks, pause_clicks, running):
     Output("gantt-graph", "figure"),
     Output("station-graph", "figure"),
     Output("stops-graph", "figure"),
+    Output("platform-train-scatter", "figure"),
     Output("network-map-graph", "figure"),
     Output("kpi-throughput", "children"),
     Output("kpi-total-delay", "children"),
@@ -1006,8 +1015,10 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
             completed_snap = sum(1 for s in sim.state.values() if s.get("status") == "completed")
             total_delay_snap = sum((s.get("waiting_s", 0.0) or 0.0) for s in sim.state.values()) / 60.0
             incidents_snap = len([e for e in acc_mgr.scheduled if e.is_active_slot(sim.current_slot)])
+            from datetime import datetime
             SIM_HISTORY.append({
                 "ts": sim.current_slot,
+                "wall_time": datetime.now().isoformat(timespec='seconds'),
                 "completed": int(completed_snap),
                 "total": int(len(sim.state)),
                 "total_delay_min": float(total_delay_snap),
@@ -1289,9 +1300,8 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
             selected_platforms = None
 
     # Figures
-    # Replace classic track timeline with platform occupancy heatmap
-    from visualization import plot_platform_heatmap
-    timeline_fig = plot_platform_heatmap(filtered_state, PLATFORMS, current_slot=sim.current_slot, selected_platforms=selected_platforms)
+    # Replace timeline with track usage vs time (human readable)
+    timeline_fig = plot_track_timeline(filtered_state, filtered_trains, accident_mgr=acc_mgr, current_slot=sim.current_slot)
     # Apply platform filter to Gantt as well (only trains using selected platforms)
     g_state = filtered_state
     g_trains = filtered_trains
@@ -1320,8 +1330,10 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
         from visualization import plot_station_overview_combined
         station_fig = plot_station_overview_combined(filtered_state, selected_platforms, current_slot=sim.current_slot)
     else:
-        from visualization import plot_platform_train_matrix
-        station_fig = plot_platform_train_matrix(filtered_state, platforms=(selected_platforms or PLATFORMS), current_slot=sim.current_slot)
+        # Default: scatter view
+        from visualization import plot_platform_train_scatter
+        station_fig = plot_platform_train_scatter(filtered_state, platforms=(selected_platforms or PLATFORMS), current_slot=sim.current_slot)
+        plat_train_scatter_fig = station_fig
 
     # Network map view
     network_fig = plot_network_map(G, filtered_state, PLATFORMS, current_slot=sim.current_slot, accident_mgr=acc_mgr)
@@ -1406,7 +1418,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
     else:
         kpi_util = "Platform Util: 0% | Busiest: N/A"
 
-    return timeline_fig, gantt_fig, station_fig, stops_fig, network_fig, kpi_throughput, kpi_total, kpi_avg, kpi_util, timeline_style, status, accident_log, system_stats, train_overview, ai_summary, ops_log, plain, now_board, history_fig
+    return timeline_fig, gantt_fig, station_fig, stops_fig, plat_train_scatter_fig, network_fig, kpi_throughput, kpi_total, kpi_avg, kpi_util, timeline_style, status, accident_log, system_stats, train_overview, ai_summary, ops_log, plain, now_board, history_fig
 
 # Removed dataset-related callbacks and dynamic section max
 
@@ -1460,6 +1472,38 @@ def download_history(n_clicks, idx):
         for r in rows:
             writer.writerow(r)
         return dict(content=output.getvalue(), filename=f"history_run_{i}.csv")
+    except Exception:
+        return dash.no_update
+
+# Download the last 10 simulations (history list) as CSV with timestamps
+@app.callback(
+    Output("download-history-list", "data"),
+    Input("download-history-list-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def download_history_list(n_clicks):
+    import csv, io
+    try:
+        if not SIM_HISTORY:
+            return dash.no_update
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=["index","ts","wall_time","completed","total","throughput_pct","total_delay_min","avg_delay_min","incidents"]) 
+        writer.writeheader()
+        hist = SIM_HISTORY[-10:]
+        for i, h in enumerate(hist, 1):
+            pct = (h['completed'] / max(1, h['total'])) * 100.0
+            writer.writerow({
+                "index": i,
+                "ts": h.get("ts"),
+                "wall_time": h.get("wall_time"),
+                "completed": h.get("completed"),
+                "total": h.get("total"),
+                "throughput_pct": f"{pct:.1f}",
+                "total_delay_min": h.get("total_delay_min"),
+                "avg_delay_min": h.get("avg_delay_min"),
+                "incidents": h.get("incidents")
+            })
+        return dict(content=output.getvalue(), filename="simulation_history_last10.csv")
     except Exception:
         return dash.no_update
 

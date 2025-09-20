@@ -7,6 +7,7 @@ import numpy as np
 
 from utils import format_node
 from accident_manager import EmergencyEvent, AccidentManager
+from data import Train
 
 # Defaults & tunables
 TIME_STEP_S = 60           # seconds per slot (1 minute)
@@ -129,7 +130,24 @@ class Simulator:
         self.G = graph
         # Multiple platforms supported
         self.platform_nodes = list(platform_nodes) if isinstance(platform_nodes, (list, tuple, set)) else [platform_nodes]
-        self.trains = deepcopy(trains)
+        # Make a working copy and assign preferred platforms round-robin so all platforms get used
+        work_trains = deepcopy(trains)
+        pref_map = {}
+        plat_order = list(self.platform_nodes)
+        if plat_order:
+            idx = 0
+            new_trains = []
+            for t in work_trains:
+                if getattr(t, "platform_required", True):
+                    p = plat_order[idx % len(plat_order)]
+                    pref_map[t.id] = p
+                    # Redirect goal to the preferred platform to bias routing
+                    t = Train(t.id, t.type, t.priority, t.start, p, t.sched_arrival, t.dwell, t.platform_required)
+                    idx += 1
+                new_trains.append(t)
+            work_trains = new_trains
+        self.preferred_platform_map = pref_map
+        self.trains = work_trains
         self.acc = accident_mgr
         self.current_slot = 0
         self.horizon_slots = int(math.ceil(horizon_minutes))
@@ -195,6 +213,10 @@ class Simulator:
             return {goal}
         if self.is_platform_node(goal):
             return {goal}
+        # Prefer assigned platform if available
+        pref = self.preferred_platform_map.get(train_info.id)
+        if pref:
+            return {pref}
         return set(self.platform_nodes)
 
     def plan_initial(self):

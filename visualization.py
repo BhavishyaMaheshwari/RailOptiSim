@@ -1305,6 +1305,62 @@ def plot_platform_train_matrix(state, platforms=None, current_slot=None):
                        font=dict(size=11, color="#7f8c8d"), xanchor="right")
     return fig
 
+def plot_platform_train_scatter(state, platforms=None, current_slot=None):
+    """Human-friendly Platform × Train scatter.
+    Each dot shows the FIRST planned stop of a train at a platform.
+    X = Train, Y = Platform. Color indicates earlier (lighter) vs later (darker) ETA.
+    """
+    import pandas as pd
+    import plotly.graph_objects as go
+    rows = []
+    for tid, st in state.items():
+        path = st.get("planned_path", [])
+        slots = st.get("planned_slots", [])
+        eta = None
+        pf = None
+        for n, s in zip(path, slots):
+            if isinstance(n, tuple) and n and n[0] == "Platform":
+                eta = int(s); pf = n; break
+        if eta is not None and pf is not None:
+            rows.append({"train": tid, "platform": pf, "eta": eta})
+    if not rows:
+        fig = go.Figure(); fig.update_layout(title="No platform usage detected"); return fig
+    df = pd.DataFrame(rows)
+    if platforms:
+        sel = set(platforms)
+        df = df[df["platform"].isin(sel)]
+    if df.empty:
+        fig = go.Figure(); fig.update_layout(title="No platform activity for the current selection yet"); return fig
+    trains = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+    plats = sorted(df["platform"].unique(), key=lambda p: (p[1], p[2]))
+    # Build scatter points
+    xs = []; ys = []; cs = []; texts = []
+    min_eta = int(df["eta"].min()); max_eta = int(df["eta"].max())
+    for _, r in df.iterrows():
+        xs.append(r["train"])
+        ys.append(format_node(r["platform"]))
+        # normalize eta to 0..1 for color scale hinting
+        norm = (int(r["eta"]) - min_eta) / max(1, (max_eta - min_eta))
+        cs.append(norm)
+        texts.append(f"First planned stop ETA: slot {int(r['eta'])}")
+    fig = go.Figure(go.Scatter(
+        x=xs, y=ys, mode="markers",
+        marker=dict(size=12, color=cs, colorscale=[[0, "#E8F8F5"], [0.5, "#A3E4D7"], [1.0, "#1ABC9C"]], line=dict(color="#2C3E50", width=1)),
+        text=texts, hovertemplate="Train: %{x}<br>Platform: %{y}<br>%{text}<extra></extra>"
+    ))
+    subtitle = f" — Now at slot {current_slot}" if current_slot is not None else ""
+    fig.update_layout(
+        title=dict(text=f"🚉 Platform × Train — first planned stops{subtitle}", x=0.5),
+        xaxis_title="Trains",
+        yaxis_title="Platforms",
+        height=max(400, 20 * len(plats)), width=max(1200, 24 * len(trains)),
+        plot_bgcolor="#FBFCFC", paper_bgcolor="#FFFFFF"
+    )
+    fig.add_annotation(text="Each dot = the train's first planned platform stop. Lighter = sooner; darker = later.",
+                       x=1, y=1.08, xref="paper", yref="paper", showarrow=False,
+                       font=dict(size=11, color="#7f8c8d"), xanchor="right")
+    return fig
+
 ## Redundant "section vs time" plot removed in favor of Network Map
 
 def plot_stops_schedule(state, platforms=None, current_slot=None):
