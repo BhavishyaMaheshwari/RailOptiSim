@@ -255,7 +255,7 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
                 # Add accident marker
                 fig.add_annotation(
                     x=current_slot + remaining/2, y=track,
-                    text=f"🚨 BLOCKED",
+                    text="BLOCKED",
                     showarrow=False,
                     font=dict(color="red", size=12, weight="bold"),
                     bgcolor="rgba(255,255,255,0.9)"
@@ -383,17 +383,17 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
     
     fig.update_layout(
         title=dict(
-            text=f"🚂 RAILWAY TRACK TIMELINE | Current: Slot {current_slot} | ✅ Completed: {completed_trains} | 🚫 Blocked: {blocked_trains} | 🚂 Running: {running_trains}",
+            text=f"RAILWAY TRACK TIMELINE | Current: Slot {current_slot} | Completed: {completed_trains} | Blocked: {blocked_trains} | Running: {running_trains}",
             x=0.5,
             font=dict(size=16)
         ),
         xaxis=dict(
-            title="⏰ Time (slots)",
+            title="Time (slots)",
             showgrid=True,
             gridcolor='rgba(128,128,128,0.2)'
         ),
         yaxis=dict(
-            title="🛤️ Railway Tracks",
+            title="Railway Tracks",
             tickmode="array",
             tickvals=list(range(num_tracks)),
             ticktext=[f"Track {i+1}" for i in range(num_tracks)],
@@ -585,7 +585,7 @@ def plot_network_map(G, state, platforms, current_slot=None, accident_mgr=None, 
             fig.add_trace(go.Scatter(
                 x=[x], y=[y], mode="markers+text",
                 marker=dict(size=16, color=color_map[tid], line=dict(width=2, color="#2C3E50")),
-                text=[f"🚂 {tid}"], textposition="top center",
+                text=[f"{tid}"], textposition="top center",
                 name=f"{tid} (now)", showlegend=False,
                 hovertemplate=f"<b>{tid}</b><br>Status: {status}<br>Pos: {format_node(cur)}<br>Next: {next_label}<br>ETA: {int(next_eta) if next_eta is not None else 'N/A'}<extra></extra>"
             ))
@@ -612,14 +612,14 @@ def plot_network_map(G, state, platforms, current_slot=None, accident_mgr=None, 
                 fig.add_trace(go.Scatter(
                     x=[x], y=[y], mode="markers+text",
                     marker=dict(symbol="x", size=24, color="#E74C3C", line=dict(width=3, color="#922B21")),
-                    text=["🚨"], textposition="top center",
+                    text=["ACCIDENT"], textposition="top center",
                     name="Accident", showlegend=False,
                     hovertemplate=f"{evtype.upper()} at {format_node(loc)}<br>rem: {remaining}<extra></extra>"
                 ))
 
     # Layout styling
     fig.update_layout(
-        title=dict(text=f"🗺️ Network Map — live paths{' | Slot ' + str(current_slot) if current_slot is not None else ''}", x=0.5, font=dict(size=18)),
+        title=dict(text=f"Network Map — live paths{' | Slot ' + str(current_slot) if current_slot is not None else ''}", x=0.5, font=dict(size=18)),
         xaxis=dict(visible=False), yaxis=dict(visible=False),
         height=600, width=1400, showlegend=True,
         margin=dict(l=40, r=40, t=60, b=40),
@@ -680,7 +680,7 @@ def plot_platform_heatmap(state, platforms, current_slot=None, selected_platform
         fig.add_vline(x=int(current_slot), line_color="red", line_width=2)
 
     fig.update_layout(
-        title=dict(text="🚉 Platform Occupancy Heatmap", x=0.5, font=dict(size=16)),
+    title=dict(text="Platform Occupancy Heatmap", x=0.5, font=dict(size=16)),
         xaxis_title="Time (slots)",
         yaxis_title="Platforms",
         height=max(400, 40 * len(plat_values)),
@@ -759,17 +759,17 @@ def plot_train_timeline(state, trains, accident_mgr=None, current_slot=None):
                     marker_color = "#FF8C00"
                     marker_size = 12
                     marker_symbol = "diamond"
-                    hover_text += "<br>🔄 REROUTED"
+                    hover_text += "<br>REROUTED"
                 elif action in ["involved_in_accident", "affected_by_accident"]:
                     marker_color = "#DC143C"
                     marker_size = 14
                     marker_symbol = "x"
-                    hover_text += "<br>🚨 ACCIDENT"
+                    hover_text += "<br>ACCIDENT"
                 elif action == "switch":
                     marker_color = color_map[tid]
                     marker_size = 14
                     marker_symbol = "diamond-cross"
-                    hover_text += "<br>⇄ SWITCHED TRACK"
+                    hover_text += "<br>SWITCHED TRACK"
             else:
                 continue
                 
@@ -863,7 +863,7 @@ def plot_train_timeline(state, trains, accident_mgr=None, current_slot=None):
                     x=[current_slot], y=[y],
                     mode="markers+text",
                     marker=dict(symbol="x", size=20, color="red"),
-                    text=["🚨"],
+                    text=["ACCIDENT"],
                     name="Accident",
                     showlegend=False,
                     hovertemplate=f"{evtype.upper()} at {format_node(loc)}<br>Slot: {current_slot}<extra></extra>"
@@ -871,16 +871,16 @@ def plot_train_timeline(state, trains, accident_mgr=None, current_slot=None):
     
     fig.update_layout(
         title=dict(
-            text="🚂 TRAIN POSITION TIMELINE",
+            text="TRAIN POSITION TIMELINE",
             x=0.5,
             font=dict(size=16)
         ),
-        xaxis_title="⏰ Time (slots)",
+    xaxis_title="Time (slots)",
         yaxis=dict(
-            title="📍 Track Sections",
+            title="Track Sections",
             tickmode="array",
             tickvals=[-0.5] + list(range(num_sections)),
-            ticktext=["🏁 Platform"] + [f"📍 Section {i+1}" for i in range(num_sections)],
+            ticktext=["Platform"] + [f"Section {i+1}" for i in range(num_sections)],
             range=[-1, max(0.5, num_sections - 0.5)],
             showgrid=True,
             gridcolor='rgba(128,128,128,0.2)'
@@ -938,7 +938,7 @@ def plot_station_overview_combined(state, selected_platforms=None, current_slot=
 
     fig.update_layout(
         barmode="stack",
-        title=dict(text="🚉 Combined Platform Activity", x=0.5, font=dict(size=18)),
+    title=dict(text="Combined Platform Activity", x=0.5, font=dict(size=18)),
         height=550,
         width=1400,
         legend=dict(orientation="h", y=-0.2),
@@ -1102,17 +1102,17 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     
     fig.update_layout(
         title=dict(
-            text=f"🚂 RAILWAY JOURNEY GANTT CHART<br>✅ Completed: {completed_trains}/{len(trains_list)} | ⏱️ Delays: {total_delays} slots | 🔄 Reroutes: {total_reroutes}",
+            text=f"Railway Journey Gantt Chart<br>Completed: {completed_trains}/{len(trains_list)} | Total delays: {total_delays} slots | Reroutes: {total_reroutes}",
             x=0.5,
             font=dict(size=16)
         ),
         xaxis=dict(
-            title="⏰ Time (slots)",
+            title="Time (slots)",
             showgrid=True,
             gridcolor='rgba(128,128,128,0.2)'
         ),
         yaxis=dict(
-            title="🚂 Trains",
+            title="Trains",
             categoryorder="array",
             categoryarray=trains_list
         ),
@@ -1198,7 +1198,7 @@ def plot_station_overview(state, platforms=None, current_slot=None):
         height=max(300, 300 * rows_needed),
         width=1400,
         title=dict(
-            text="🚉 Platform Activity — top active platforms first",
+            text="Platform Activity — top active platforms first",
             x=0.5,
             font=dict(size=18)
         ),
@@ -1241,7 +1241,7 @@ def plot_platform_train_matrix(state, platforms=None, current_slot=None):
         fig = go.Figure()
         subtitle = f" — Slot {current_slot}" if current_slot is not None else ""
         fig.update_layout(
-            title=dict(text=f"🚉 Platform × Train Matrix{subtitle}", x=0.5, font=dict(size=18)),
+            title=dict(text=f"Platform × Train Matrix{subtitle}", x=0.5, font=dict(size=18)),
             annotations=[dict(text="No platform activity for the current selection yet",
                               x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False,
                               font=dict(size=14, color="#7f8c8d"))],
@@ -1287,10 +1287,10 @@ def plot_platform_train_matrix(state, platforms=None, current_slot=None):
     # Title + helpful subtitle
     if current_slot is not None:
         fig.update_layout(
-            title=dict(text=f"🚉 Platform × Train Matrix — Slot {current_slot}", x=0.5, font=dict(size=18))
+            title=dict(text=f"Platform × Train Matrix — Slot {current_slot}", x=0.5, font=dict(size=18))
         )
     else:
-        fig.update_layout(title=dict(text="🚉 Platform × Train Matrix", x=0.5, font=dict(size=18)))
+        fig.update_layout(title=dict(text="Platform × Train Matrix", x=0.5, font=dict(size=18)))
 
     fig.update_layout(
         xaxis_title="Trains",
@@ -1350,7 +1350,7 @@ def plot_platform_train_scatter(state, platforms=None, current_slot=None):
     ))
     subtitle = f" — Now at slot {current_slot}" if current_slot is not None else ""
     fig.update_layout(
-        title=dict(text=f"🚉 Platform × Train — first planned stops{subtitle}", x=0.5),
+        title=dict(text=f"Platform × Train — first planned stops{subtitle}", x=0.5),
         xaxis_title="Trains",
         yaxis_title="Platforms",
         height=max(400, 20 * len(plats)), width=max(1200, 24 * len(trains)),
@@ -1470,7 +1470,7 @@ def plot_stops_schedule(state, platforms=None, current_slot=None):
             ))
 
     fig.update_layout(
-        title=dict(text="🕒 Stops Comparator — Expected vs Actual", x=0.5, font=dict(size=16)),
+        title=dict(text="Stops Comparator — Expected vs Actual", x=0.5, font=dict(size=16)),
         xaxis_title="Time (slots)",
         yaxis=dict(title="Trains", categoryorder="array", categoryarray=y_order),
         height=max(400, 30 * len(y_order)),

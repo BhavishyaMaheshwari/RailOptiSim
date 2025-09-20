@@ -53,31 +53,31 @@ def generate_accident_log(accident_mgr, current_slot):
     
     # Add prescheduled accidents
     for event in accident_mgr.scheduled:
-        status = "🟢 ACTIVE" if event.is_active_slot(current_slot) else "⏳ SCHEDULED"
+        status = "ACTIVE" if event.is_active_slot(current_slot) else "SCHEDULED"
         if event.start_time > current_slot:
-            status = "📅 FUTURE"
+            status = "FUTURE"
         elif event.end_time <= current_slot:
-            status = "✅ RESOLVED"
+            status = "RESOLVED"
             
         involved_train = accident_mgr.involved_trains.get(event.event_id, "None")
         affected_count = len(accident_mgr.affected_trains.get(event.event_id, []))
         rerouted_count = len(accident_mgr.rerouted_trains.get(event.event_id, []))
         
         log_entries.append(html.Div([
-            html.Strong(f"🚨 {event.event_id} - {event.ev_type.upper()}"),
+            html.Strong(f"{event.event_id} - {event.ev_type.upper()}"),
             html.Br(),
-            f"📍 Location: {format_node(event.location)}",
+            f"Location: {format_node(event.location)}",
             html.Br(),
-            f"⏰ Start: Slot {event.start_time} | Duration: {event.duration_slots} slots",
+            f"Start: Slot {event.start_time} | Duration: {event.duration_slots} slots",
             html.Br(),
-            f"🚂 Involved: {involved_train} | Affected: {affected_count} | Rerouted: {rerouted_count}",
+            f"Involved: {involved_train} | Affected: {affected_count} | Rerouted: {rerouted_count}",
             html.Br(),
-            f"📊 Status: {status}",
+            f"Status: {status}",
             html.Hr(style={"margin": "5px 0"})
         ], style={"margin-bottom": "10px", "padding": "8px", "background-color": "white", "border-radius": "3px"}))
     
     if not log_entries:
-        log_entries.append(html.Div("✅ No accidents scheduled or active", 
+        log_entries.append(html.Div("No accidents scheduled or active", 
                                   style={"text-align": "center", "color": "green", "font-style": "italic"}))
     
     return log_entries
@@ -142,21 +142,21 @@ def generate_system_stats(state, trains, accident_mgr, current_slot):
         busiest_pf, busiest_util = max(plat_util.items(), key=lambda kv: kv[1])
 
     stats_html = [
-        html.H5("🚂 Train Status", className="mb-2"),
-        html.P(f"✅ Completed: {completed_trains}/{len(trains)}"),
-        html.P(f"🚫 Blocked: {blocked_trains}"),
-        html.P(f"🚂 Running: {running_trains}"),
-        html.P(f"⏳ Not Arrived: {not_arrived}"),
+        html.H5("Train Status", className="mb-2"),
+        html.P(f"Completed: {completed_trains}/{len(trains)}"),
+        html.P(f"Blocked: {blocked_trains}"),
+        html.P(f"Running: {running_trains}"),
+        html.P(f"Not Arrived: {not_arrived}"),
         html.Hr(),
-        html.H5("📊 Performance Metrics", className="mb-2"),
-        html.P(f"📈 Throughput: {completed_trains} trains ({completion_pct:.1f}%)"),
-        html.P(f"⏱️ Total Delays: {total_delays:.1f} minutes"),
-        html.P(f"⏱️ Avg Delay/Train: {avg_delay:.1f} minutes"),
-        html.P(f"🔄 Total Reroutes: {total_reroutes}"),
-        html.P(f"🚨 Active Accidents: {active_accidents}"),
-        html.P(f"🏁 Busiest Platform: {format_node(busiest_pf) if busiest_pf else 'N/A'} ({busiest_util*100:.0f}% util)"),
+        html.H5("Performance Metrics", className="mb-2"),
+        html.P(f"Throughput: {completed_trains} trains ({completion_pct:.1f}%)"),
+        html.P(f"Total Delays: {total_delays:.1f} minutes"),
+        html.P(f"Avg Delay/Train: {avg_delay:.1f} minutes"),
+        html.P(f"Total Reroutes: {total_reroutes}"),
+        html.P(f"Active Accidents: {active_accidents}"),
+        html.P(f"Busiest Platform: {format_node(busiest_pf) if busiest_pf else 'N/A'} ({busiest_util*100:.0f}% util)"),
         html.Hr(),
-        html.H5("⏰ System Time", className="mb-2"),
+        html.H5("System Time", className="mb-2"),
         html.P(f"Current Slot: {current_slot}"),
         html.P(f"Time: {current_slot} minutes")
     ]
@@ -171,7 +171,7 @@ def generate_system_stats(state, trains, accident_mgr, current_slot):
                     f"Run {i}: t={h['ts']}m • {h['completed']}/{h['total']} done ({pct:.0f}%) • total delay {h['total_delay_min']:.1f}m • incidents {h['incidents']}",
                     style={"fontSize": "12px"}
                 ))
-            stats_html.extend([html.Hr(), html.H6("🗂️ Recent Runs (last 10)"), html.Ul(items)])
+            stats_html.extend([html.Hr(), html.H6("Recent Runs (last 10)"), html.Ul(items)])
     except Exception:
         pass
     
@@ -225,13 +225,13 @@ def generate_ai_summary(state, acc_mgr, platforms, current_slot):
     recent_ops = recent_ops[:5]
 
     return [
-        html.H5("🤖 AI Operations Summary"),
+        html.H5("AI Operations Summary"),
         html.Div([
-            html.P(f"⏰ Current Time: Slot {current_slot} | 🚉 Platform Efficiency: {platform_efficiency:.1f}"),
-            html.P(f"🚂 Fleet Status: {completed}/{total} completed, {running} active, {blocked} blocked"),
-            html.P(f"🚨 Active Incidents: {', '.join(ev_details) if ev_details else 'None'}"),
-            html.P(f"🏆 Top Platforms: {', '.join([f'{format_node(p)}({c})' for p, c in busiest]) if busiest else 'N/A'}"),
-            html.P(f"📊 System Load: {'High' if blocked > 2 else 'Medium' if blocked > 0 else 'Normal'}"),
+            html.P(f"Current Time: Slot {current_slot} | Platform Efficiency: {platform_efficiency:.1f}"),
+            html.P(f"Fleet Status: {completed}/{total} completed, {running} active, {blocked} blocked"),
+            html.P(f"Active Incidents: {', '.join(ev_details) if ev_details else 'None'}"),
+            html.P(f"Top Platforms: {', '.join([f'{format_node(p)}({c})' for p, c in busiest]) if busiest else 'N/A'}"),
+            html.P(f"System Load: {'High' if blocked > 2 else 'Medium' if blocked > 0 else 'Normal'}"),
             html.Ul([html.Li(x) for x in recent_ops]) if recent_ops else html.P("No recent events in the last few minutes.")
         ], style={"fontSize": "14px"})
     ]
@@ -247,30 +247,30 @@ def generate_operations_log(state, current_slot):
             if isinstance(rec, tuple) and len(rec) >= 4:
                 slot, prev_node, next_node, action = rec[0], rec[1], rec[2], rec[3]
                 if action == "runtime_plan":
-                    entries.append((slot, f"{slot:>3} | 🔄 {tid} rerouted"))
+                    entries.append((slot, f"{slot:>3} | {tid} rerouted"))
                 elif action == "enter" and fmt_platform(next_node):
-                    entries.append((slot, f"{slot:>3} | ⏺️ {tid} arrived at {format_node(next_node)}"))
+                    entries.append((slot, f"{slot:>3} | {tid} arrived at {format_node(next_node)}"))
                 elif action == "depart" and fmt_platform(prev_node or next_node):
                     pf = prev_node if fmt_platform(prev_node) else next_node
-                    entries.append((slot, f"{slot:>3} | ⏏️ {tid} departed from {format_node(pf)}"))
+                    entries.append((slot, f"{slot:>3} | {tid} departed from {format_node(pf)}"))
                 elif action == "completed":
-                    entries.append((slot, f"{slot:>3} | ✅ {tid} completed journey"))
+                    entries.append((slot, f"{slot:>3} | {tid} completed journey"))
                 elif action == "switch":
-                    entries.append((slot, f"{slot:>3} | ⇄ {tid} switched tracks"))
+                    entries.append((slot, f"{slot:>3} | {tid} switched tracks"))
                 elif action == "blocked_by_accident":
-                    entries.append((slot, f"{slot:>3} | 🚫 {tid} waiting (accident block)"))
+                    entries.append((slot, f"{slot:>3} | {tid} waiting (accident block)"))
                 elif action == "resume":
-                    entries.append((slot, f"{slot:>3} | ▶️ {tid} resumed movement"))
+                    entries.append((slot, f"{slot:>3} | {tid} resumed movement"))
             elif isinstance(rec, dict):
                 slot = rec.get("slot")
                 action = rec.get("action")
                 node = rec.get("node")
                 if action == "runtime_plan":
-                    entries.append((slot, f"{slot:>3} | 🔄 {tid} rerouted (delay +{rec.get('delay', 0)} slots)"))
+                    entries.append((slot, f"{slot:>3} | {tid} rerouted (delay +{rec.get('delay', 0)} slots)"))
                 elif action == "involved_in_accident":
-                    entries.append((slot, f"{slot:>3} | 🚨 {tid} involved in accident at {format_node(node)}"))
+                    entries.append((slot, f"{slot:>3} | {tid} involved in accident at {format_node(node)}"))
                 elif action == "affected_by_accident":
-                    entries.append((slot, f"{slot:>3} | ⚠️ {tid} affected by accident (track blocked)"))
+                    entries.append((slot, f"{slot:>3} | {tid} affected by accident (track blocked)"))
     # Sort by slot, then message
     entries.sort(key=lambda x: (x[0] if x[0] is not None else -1, x[1]))
     # Limit to last ~50 for readability
@@ -440,7 +440,7 @@ PLATFORM_ACCESS_MAP = {}
 for tr in range(NUM_TRACKS):
     PLATFORM_ACCESS_MAP[tr] = [(0, pf) for pf in range(PLATFORMS_PER_STATION)]
 
-print("🚂 Initializing Railway Infrastructure...")
+print("Initializing Railway Infrastructure...")
 # Build demo graph only (no external JSONs)
 G, PLATFORMS = build_graph(
     num_tracks=NUM_TRACKS,
@@ -450,14 +450,14 @@ G, PLATFORMS = build_graph(
     platform_access_map=PLATFORM_ACCESS_MAP
 )
 trains = generate_fixed_trains(sections_per_track=SECTIONS, num_trains=10, num_tracks=NUM_TRACKS)
-print(f"✅ Demo network built: {NUM_TRACKS} tracks × {SECTIONS} sections + {NUM_STATIONS} stations × {PLATFORMS_PER_STATION} platforms")
+print(f"Demo network built: {NUM_TRACKS} tracks × {SECTIONS} sections + {NUM_STATIONS} stations × {PLATFORMS_PER_STATION} platforms")
 
 # Initialize the accident management system
-print("🚨 Initializing Emergency Management System...")
+print("Initializing Emergency Management System...")
 acc_mgr = AccidentManager()
 # Configure accident manager with network parameters
 acc_mgr.set_network(sections_per_track=CURRENT_SECTIONS)
-print("✅ Emergency response system online")
+print("Emergency response system online")
 
 # Initialize the simulation engine
 print("⚙️ Initializing Simulation Engine...")
@@ -470,10 +470,10 @@ sim = Simulator(
 )
 
 # Perform initial route planning for all trains
-print("🗺️ Performing Initial Route Planning...")
+print("Performing Initial Route Planning...")
 sim.plan_initial()
-print("✅ All trains have optimized routes planned")
-print("🚀 RailOptimusSim is ready for operation!")
+print("All trains have optimized routes planned")
+print("RailOptimusSim is ready for operation!")
 
 # Maintain last 10 simulation snapshots for quick history view
 SIM_HISTORY = []  # entries: {"ts": int_slot, "wall_time": ISO-8601 str, "completed": int, "total": int, "total_delay_min": float, "avg_delay_min": float, "incidents": int, "ops": list[dict]}
@@ -483,7 +483,7 @@ SIM_HISTORY = []  # entries: {"ts": int_slot, "wall_time": ISO-8601 str, "comple
 # =============================================================================
 
 # Initialize the Dash web application with Bootstrap styling
-print("🌐 Initializing Web Application...")
+print("Initializing Web Application...")
 app = dash.Dash(
     __name__, 
     external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -494,11 +494,11 @@ app = dash.Dash(
     ]
 )
 server = app.server
-print("✅ Web application initialized with professional styling")
+print("Web application initialized with professional styling")
 
 app.layout = dbc.Container([
     html.Div([
-        html.H1("🚂 RailOptimusSim — Advanced Railway Control Center 🚂", 
+        html.H1("RailOptimusSim — Advanced Railway Control Center", 
                 className="text-center mb-4", 
                 style={"color": "#2C3E50", "fontWeight": "bold", "textShadow": "2px 2px 4px rgba(0,0,0,0.1)"}),
         html.P("Real-time railway traffic simulation with intelligent accident management and dynamic rerouting", 
@@ -508,11 +508,11 @@ app.layout = dbc.Container([
     
     dbc.Card([
         dbc.CardBody([
-                html.H4("🎯 Simulation Overview", className="card-title"),
+                html.H4("Simulation Overview", className="card-title"),
              html.P(f"This simulation models 10 trains (Express, Passenger, Freight) on a {NUM_TRACKS}-track network with {SECTIONS} sections per track and {NUM_STATIONS} station × {PLATFORMS_PER_STATION} platforms ({NUM_STATIONS*PLATFORMS_PER_STATION} total), featuring intelligent pathfinding and real-time accident response.", 
                    className="card-text"),
             html.Hr(),
-            html.H5("⚠️ Emergency Accident Interface", className="mb-3"),
+            html.H5("Emergency Accident Interface", className="mb-3"),
             html.P("Use the controls below to trigger emergency scenarios and test the system's response capabilities:", 
                    style={"fontStyle": "italic", "color": "#7F8C8D"}),
             html.Ul([
@@ -520,14 +520,14 @@ app.layout = dbc.Container([
                 html.Li(html.Strong("Section Index (0-3):"), " Choose the specific section on the selected track"),
                 html.Li(html.Strong("Duration (1-120 slots):"), " Set how long the emergency will last (in minutes)"),
             ], className="mb-3"),
-            html.P("Click 'Trigger Accident ⚠️' to activate the emergency scenario and observe real-time system response.", 
+         html.P("Click 'Trigger Emergency' to activate the scenario and observe real-time system response.", 
                    style={"fontStyle": "italic", "color": "#E74C3C", "fontWeight": "bold"}),
         ])
     ], className="mb-4"),
     # Removed dataset ingestion UI
     dbc.Card([
         dbc.CardBody([
-            html.H5("🎬 One-Click Demos & Presets", className="card-title mb-3"),
+            html.H5("One-Click Demos & Presets", className="card-title mb-3"),
             dbc.Row([
                 dbc.Col([
                     dbc.Label("Preset Scenarios", className="fw-bold"),
@@ -550,8 +550,8 @@ app.layout = dbc.Container([
                 dbc.Col([
                     dbc.Label("Actions", className="fw-bold"),
                     dbc.ButtonGroup([
-                        dbc.Button("Apply Preset ▶", id="apply-preset", color="info", className="me-2"),
-                        dbc.Button("Guided Demo 🎥", id="guided-demo", color="secondary"),
+                        dbc.Button("Apply Preset", id="apply-preset", color="info", className="me-2"),
+                        dbc.Button("Guided Demo", id="guided-demo", color="secondary"),
                     ])
                 ], width=6)
             ])
@@ -559,13 +559,13 @@ app.layout = dbc.Container([
     ], className="mb-4"),
     dbc.Card([
         dbc.CardBody([
-            html.H5("🎮 Simulation Controls", className="card-title mb-3"),
+            html.H5("Simulation Controls", className="card-title mb-3"),
             dbc.Row([
-                dbc.Col(dbc.Button("Step ▶", id="step-btn", color="primary", size="lg", className="me-2"), width="auto"),
-                dbc.Col(dbc.Button("Run ⏵", id="run-btn", color="success", size="lg", className="me-2"), width="auto"),
-                dbc.Col(dbc.Button("Pause ⏸", id="pause-btn", color="warning", size="lg", className="me-2", disabled=True), width="auto"),
+                dbc.Col(dbc.Button("Step", id="step-btn", color="primary", size="lg", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Run", id="run-btn", color="success", size="lg", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Pause", id="pause-btn", color="warning", size="lg", className="me-2", disabled=True), width="auto"),
                 dbc.Col(html.Span(id="run-status-badge", className="badge bg-secondary align-self-center", children="Idle"), width="auto"),
-                dbc.Col(dbc.Button("Reset ↺", id="reset-btn", color="danger", size="lg", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Reset", id="reset-btn", color="danger", size="lg", className="me-2"), width="auto"),
             ], className="mb-3"),
             dbc.Row([
                 dbc.Col([
@@ -583,7 +583,7 @@ app.layout = dbc.Container([
     ], className="mb-4"),
     dbc.Card([
         dbc.CardBody([
-            html.H5("🚨 Emergency Scenario Trigger", className="card-title mb-3"),
+            html.H5("Emergency Scenario Trigger", className="card-title mb-3"),
             dcc.Tabs(id="accident-tabs", value="track", children=[
                 dcc.Tab(label="Track/Section", value="track", children=[
                     dbc.Row([
@@ -615,7 +615,7 @@ app.layout = dbc.Container([
                         ], width=4),
                         dbc.Col([
                             dbc.Label("Action", className="fw-bold"),
-                            dbc.Button("🚨 Trigger Emergency", id="trigger-acc", color="danger", size="lg", className="w-100")
+                            dbc.Button("Trigger Emergency", id="trigger-acc", color="danger", size="lg", className="w-100")
                         ], width=4)
                     ], className="align-items-end mt-2"),
                 ]),
@@ -650,7 +650,7 @@ app.layout = dbc.Container([
                         ], width=3),
                         dbc.Col([
                             dbc.Label("Action", className="fw-bold"),
-                            dbc.Button("🚨 Trigger Platform Emergency", id="trigger-platform-acc", color="danger", size="lg", className="w-100")
+                            dbc.Button("Trigger Platform Emergency", id="trigger-platform-acc", color="danger", size="lg", className="w-100")
                         ], width=3)
                     ], className="align-items-end mt-2"),
                 ]),
@@ -671,7 +671,7 @@ app.layout = dbc.Container([
                         ], width=3),
                         dbc.Col([
                             dbc.Label("Action", className="fw-bold"),
-                            dbc.Button("🧯 Trigger Breakdown", id="trigger-breakdown", color="secondary", size="lg", className="w-100")
+                            dbc.Button("Trigger Breakdown", id="trigger-breakdown", color="secondary", size="lg", className="w-100")
                         ], width=3)
                     ], className="align-items-end mt-2"),
                 ]),
@@ -682,7 +682,7 @@ app.layout = dbc.Container([
     ], className="mb-4"),
     dbc.Card([
         dbc.CardBody([
-            html.H5("🔎 Views & Filters", className="card-title mb-3"),
+            html.H5("Views & Filters", className="card-title mb-3"),
             dbc.Row([
                 dbc.Col([
                     dbc.Label("Filter Trains", className="fw-bold"),
@@ -794,13 +794,13 @@ app.layout = dbc.Container([
     }),
     dbc.Card([
         dbc.CardBody([
-            html.H5("🛎️ Now Board (Next Arrivals)", className="card-title mb-3"),
+            html.H5("Now Board (Next Arrivals)", className="card-title mb-3"),
             html.Div(id="now-board")
         ])
     ], className="mt-3"),
     dbc.Card([
         dbc.CardBody([
-            html.H5("🗂️ Run History (last 10)", className="card-title mb-3"),
+            html.H5("Run History (last 10)", className="card-title mb-3"),
             dcc.Graph(id="history-graph", config={
                 "displaylogo": False,
                 "toImageButtonOptions": {"format": "png", "scale": 3},
@@ -813,20 +813,20 @@ app.layout = dbc.Container([
     # Removed geographic corridor graph
     dbc.Card([
         dbc.CardBody([
-            html.H5("🧭 What am I looking at? (Network Map)", className="card-title mb-2"),
+            html.H5("What am I looking at? (Network Map)", className="card-title mb-2"),
             html.Ul([
                 html.Li("The long grey lines are tracks — like roads for trains."),
-                html.Li("Yellow dots are platforms — the places where trains stop. They’re grouped into one big yellow zone: Station 1."),
-                html.Li("Each train is a 🚂 with a colored line showing where it is going next (a short future path)."),
-                html.Li("Curvy connectors show where a train can change tracks or go into a platform."),
-                html.Li("A red ✖ mark means an emergency (that part of the track or a platform is blocked for a while)."),
+                html.Li("Yellow dots are platforms — the places where trains stop. They’re grouped into one zone: Station 1."),
+                html.Li("Each train is shown with a colored path indicating its next moves."),
+                html.Li("Curved connectors show where a train can change tracks or enter a platform."),
+                html.Li("A red X mark means an emergency (that part of the track or a platform is blocked for a while)."),
             ], style={"marginBottom": 0})
         ])
     ], className="mb-4"),
     dbc.Row([
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader(html.H4("🚨 Emergency Event Log", className="mb-0", style={"color": "#E74C3C"})),
+                dbc.CardHeader(html.H4("Emergency Event Log", className="mb-0", style={"color": "#E74C3C"})),
                 dbc.CardBody([
                     html.Div(id="accident-log", style={
                         "height": "350px", 
@@ -842,7 +842,7 @@ app.layout = dbc.Container([
         ], width=6),
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader(html.H4("📊 System Performance Dashboard", className="mb-0", style={"color": "#27AE60"})),
+                dbc.CardHeader(html.H4("System Performance Dashboard", className="mb-0", style={"color": "#27AE60"})),
                 dbc.CardBody([
                     html.Div(id="system-stats", style={
                         "height": "350px", 
@@ -857,7 +857,7 @@ app.layout = dbc.Container([
         ], width=6),
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader(html.H4("🧾 Operations Log", className="mb-0", style={"color": "#34495E"})),
+                dbc.CardHeader(html.H4("Operations Log", className="mb-0", style={"color": "#34495E"})),
                 dbc.CardBody([
                     dbc.Row([
                         dbc.Col(dbc.Button("Download Current CSV", id="download-ops-btn", color="secondary", size="sm"), width="auto"),
@@ -887,7 +887,7 @@ app.layout = dbc.Container([
     # Train Overview (Start/Stop/Status/Delay)
     dbc.Card([
         dbc.CardBody([
-            html.H5("🚆 Train Overview", className="card-title mb-3"),
+            html.H5("Train Overview", className="card-title mb-3"),
             html.Div(id="train-overview", style={
                 "maxHeight": "380px",
                 "overflowY": "auto",
@@ -900,14 +900,14 @@ app.layout = dbc.Container([
     ], className="mt-3"),
     dbc.Card([
         dbc.CardBody([
-            html.H5("🧠 AI Operations Summary", className="card-title mb-3"),
+            html.H5("AI Operations Summary", className="card-title mb-3"),
             html.Div(id="ai-summary")
         ])
     ], className="mt-3"),
     # Removed dataset-loaded store
     dbc.Card([
         dbc.CardBody([
-            html.H5("🗣️ Plain English Summary", className="card-title mb-3"),
+            html.H5("Plain English Summary", className="card-title mb-3"),
             html.Div(id="plain-summary", style={"fontFamily": "Arial, sans-serif", "fontSize": "14px"})
         ])
     ], className="mt-3"),
@@ -916,7 +916,7 @@ app.layout = dbc.Container([
     
     dbc.Card([
         dbc.CardBody([
-            html.H5("📡 System Status", className="card-title mb-3"),
+            html.H5("System Status", className="card-title mb-3"),
             html.Div(id="sim-status", style={
                 "padding": "15px",
                 "border": "2px solid #3498DB",
@@ -945,13 +945,13 @@ app.layout = dbc.Container([
 def run_pause(run_clicks, pause_clicks, running):
     ctx = dash.callback_context
     if not ctx.triggered:
-        return True, False, "Run ⏵", "success", True, "Idle"
+        return True, False, "Run", "success", True, "Idle"
     trig = ctx.triggered[0]["prop_id"].split(".")[0]
     if trig == "run-btn":
-        return False, True, "Running ⏵", "secondary", False, "▶ Running"
+        return False, True, "Running", "secondary", False, "Running"
     if trig == "pause-btn":
-        return True, False, "Run ⏵", "success", True, "⏸ Paused"
-    return True, False, "Run ⏵", "success", True, "Idle"
+        return True, False, "Run", "success", True, "Paused"
+    return True, False, "Run", "success", True, "Idle"
 
 
 # Callback: step, interval tick, trigger accident, reset
@@ -1073,9 +1073,9 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
             acc_mgr.schedule(ev)
             if delay == 0:
                 sim.handle_accident(loc, duration)
-            status = f"🚨 Emergency: Track {acc_track}, Section {acc_section} blocked for {duration} slots (sev={sev}, delay={delay})"
+            status = f"Emergency: Track {acc_track}, Section {acc_section} blocked for {duration} slots (sev={sev}, delay={delay})"
         except Exception as e:
-            status = f"⚠️ Failed to schedule accident: {str(e)}"
+            status = f"Failed to schedule accident: {str(e)}"
     elif trig == "trigger-platform-acc":
         try:
             if not platform_nodes or platform_acc_duration is None:
@@ -1114,9 +1114,9 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
                 if delay == 0:
                     sim.handle_accident(pnode, duration)
                 created += 1
-            status = f"🚨 Platform emergency: {created} platform(s) blocked for {duration} slots (sev={sev}, delay={delay})"
+            status = f"Platform emergency: {created} platform(s) blocked for {duration} slots (sev={sev}, delay={delay})"
         except Exception as e:
-            status = f"⚠️ Failed to schedule platform emergency: {str(e)}"
+            status = f"Failed to schedule platform emergency: {str(e)}"
     elif trig == "trigger-breakdown":
         try:
             if not breakdown_train or breakdown_duration is None:
@@ -1152,22 +1152,22 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
             acc_mgr.set_involved_train(ev.event_id, breakdown_train)
             # Reroute others if needed
             sim.handle_accident(node, duration)
-            status = f"🧯 Breakdown: {breakdown_train} disabled at {format_node(node)} for {duration} slots"
+            status = f"Breakdown: {breakdown_train} disabled at {format_node(node)} for {duration} slots"
         except Exception as e:
-            status = f"⚠️ Failed to trigger breakdown: {str(e)}"
+            status = f"Failed to trigger breakdown: {str(e)}"
     elif trig == "apply-preset":
         try:
             if not scenario_value:
                 raise ValueError("Pick a preset first")
             created = []
             if scenario_value == "smooth":
-                status = "✅ Smooth Run preset applied (no incidents)."
+                status = "Smooth Run preset applied (no incidents)."
             elif scenario_value == "acc_t3s2":
                 ev = EmergencyEvent(event_id=str(uuid.uuid4())[:8], ev_type="accident", location=(2, 1), start_time=sim.current_slot, duration_slots=6, info={"severity": "high"})
                 acc_mgr.schedule(ev)
                 sim.handle_accident((2, 1), 6)
                 created.append("Track T3-S2 (6)")
-                status = "🚨 Track accident preset applied."
+                status = "Track accident preset applied."
             elif scenario_value == "st1_pf1_4":
                 max_pf = min(4, PLATFORMS_PER_STATION)
                 plats = [("Platform", 0, pf) for pf in range(0, max_pf)]
@@ -1176,7 +1176,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
                     acc_mgr.schedule(ev)
                     sim.handle_accident(p, 8)
                 created.append("Station1 P1-4 (8)")
-                status = "🚨 Station 1 platform block preset applied."
+                status = "Station 1 platform block preset applied."
             elif scenario_value == "bd_t3":
                 tid = "T3"
                 st = sim.state.get(tid)
@@ -1195,7 +1195,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
                     acc_mgr.set_involved_train(ev.event_id, tid)
                 sim.handle_accident(node, 5)
                 created.append("T3 breakdown (5)")
-                status = "🧯 Train T3 breakdown preset applied."
+                status = "Train T3 breakdown preset applied."
             elif scenario_value == "mix":
                 # Mix: schedule future events as a guided sequence adapted to single-station
                 # Now: small platform block at Station1 P1-4 (or fewer if not available) for 6
@@ -1211,7 +1211,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
                 # +4: T2 breakdown (5)
                 ev3 = EmergencyEvent(event_id=str(uuid.uuid4())[:8], ev_type="breakdown", location=(0, 0), start_time=sim.current_slot + 4, duration_slots=5, info={"severity": "high", "train": "T2"})
                 acc_mgr.schedule(ev3)
-                status = "🎥 Guided mix preset queued: Station1 platforms now, track in +2, breakdown in +4."
+                status = "Guided mix preset queued: Station1 platforms now, track in +2, breakdown in +4."
             elif scenario_value == "rush_wave":
                 # Rush hour: compress schedules of first half trains and small staggered platform blocks
                 # Move arrival times earlier to create a wave
@@ -1229,7 +1229,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
                     acc_mgr.schedule(ev)
                     if offset == 0:
                         sim.handle_accident(p, 3)
-                status = "🚇 Rush Hour Wave: earlier arrivals and brief platform blocks queued."
+                status = "Rush Hour Wave: earlier arrivals and brief platform blocks queued."
             elif scenario_value == "plat_wave":
                 # Platform wave: sequentially block P0->P3 to create a wave effect
                 max_pf = min(4, PLATFORMS_PER_STATION)
@@ -1239,7 +1239,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
                     acc_mgr.schedule(ev)
                     if i == 0:
                         sim.handle_accident(p, 4)
-                status = "🌊 Platform Wave preset queued across P1→P4."
+                status = "Platform Wave preset queued across P1–P4."
             elif scenario_value == "recovery":
                 # Clean recovery: start with a couple of incidents that expire soon
                 ev1 = EmergencyEvent(event_id=str(uuid.uuid4())[:8], ev_type="accident", location=(0, 1), start_time=sim.current_slot, duration_slots=3, info={"severity": "low"})
@@ -1247,11 +1247,11 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
                 sim.handle_accident((0, 1), 3)
                 ev2 = EmergencyEvent(event_id=str(uuid.uuid4())[:8], ev_type="accident", location=(2, 2), start_time=sim.current_slot + 1, duration_slots=3, info={"severity": "low"})
                 acc_mgr.schedule(ev2)
-                status = "🧽 Clean Recovery: short incidents scheduled to clear quickly."
+                status = "Clean Recovery: short incidents scheduled to clear quickly."
             else:
-                status = "ℹ️ Preset not recognized."
+                status = "Preset not recognized."
         except Exception as e:
-            status = f"⚠️ Failed to apply preset: {str(e)}"
+            status = f"Failed to apply preset: {str(e)}"
     elif trig == "guided-demo":
         try:
             # Sequence: immediate T3 breakdown 4m, +2 accident (2,1) 6m, +4 Station1 P1-4 8m
@@ -1275,7 +1275,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
                 acc_mgr.schedule(ev3)
             status = "🎬 Guided demo queued: breakdown now, track accident in +2, station block in +4."
         except Exception as e:
-            status = f"⚠️ Failed to queue guided demo: {str(e)}"
+            status = f"Failed to queue guided demo: {str(e)}"
     elif trig == "unused":
         pass
     
@@ -1513,11 +1513,11 @@ def download_history_list(n_clicks):
 
 if __name__ == "__main__":
     print("\n" + "="*80)
-    print("🚀 RAILOPTIMUSSIM - ADVANCED RAILWAY CONTROL CENTER")
+    print("RAILOPTIMUSSIM - ADVANCED RAILWAY CONTROL CENTER")
     print("="*80)
-    print("🌐 Starting web server...")
-    print("📊 Dashboard will be available at: http://127.0.0.1:8050")
-    print("🎯 System ready for professional railway simulation!")
+    print("Starting web server...")
+    print("Dashboard will be available at: http://127.0.0.1:8050")
+    print("System ready for professional railway simulation!")
     print("="*80 + "\n")
     
     # Launch the application with professional settings
