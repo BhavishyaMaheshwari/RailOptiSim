@@ -2,8 +2,8 @@
 from collections import namedtuple
 import networkx as nx
 
-# Train tuple
-Train = namedtuple("Train", ["id", "type", "priority", "start", "goal", "sched_arrival", "dwell"])
+# Train tuple (platform_required added)
+Train = namedtuple("Train", ["id", "type", "priority", "start", "goal", "sched_arrival", "dwell", "platform_required"])
 
 PRIORITY_MAP = {"Express": 0, "Passenger": 1, "Freight": 2}  # lower number = higher priority
 
@@ -63,25 +63,30 @@ def build_graph(num_tracks=5, sections_per_track=4, num_stations=1, platforms_pe
 
     return G, platforms
 
-def generate_fixed_trains(sections_per_track=4):
+def generate_fixed_trains(sections_per_track=4, num_trains=32, num_tracks=8, platform_optional_ratio=0.25):
     """
-    Returns a list of 10 deterministic Train objects (fixed dataset)
-    sched_arrival is in minutes (slot index since time_step_s=60s)
-    NOTE: Goals remain as last section nodes; the simulator routes to any platform.
+    Generate a deterministic set of trains for demo.
+    - num_trains: total trains to create (default 32)
+    - num_tracks: to distribute starts/goals (default 8)
+    - sections_per_track: last section index for goals
+
+    Staggers schedules by 1 minute; types cycle through Express/Passenger/Freight.
     """
-    fixed = [
-        ("T1", "Express",  (0, 0), (2, sections_per_track - 1), 0, 4),
-        ("T2", "Passenger",(1, 0), (0, sections_per_track - 1), 1, 3),
-        ("T3", "Freight", (4, 0), (3, sections_per_track - 1), 2, 6),
-        ("T4", "Passenger",(2, 0), (1, sections_per_track - 1), 2, 3),
-        ("T5", "Express", (3, 0), (4, sections_per_track - 1), 3, 4),
-        ("T6", "Passenger",(0, 0), (1, sections_per_track - 1), 4, 3),
-        ("T7", "Freight", (2, 0), (2, sections_per_track - 1), 5, 6),
-        ("T8", "Passenger",(4, 0), (0, sections_per_track - 1), 6, 3),
-        ("T9", "Express", (1, 0), (3, sections_per_track - 1), 7, 4),
-        ("T10","Passenger",(3, 0), (4, sections_per_track - 1), 8, 3),
-    ]
+    types_cycle = ["Express", "Passenger", "Freight", "Passenger"]
+    dwell_map = {"Express": 3, "Passenger": 4, "Freight": 6}
     trains = []
-    for tid, ttype, start, goal, arr, dwell in fixed:
-        trains.append(Train(tid, ttype, PRIORITY_MAP[ttype], start, goal, arr, dwell))
+    import random
+    random.seed(42)
+    for i in range(int(num_trains)):
+        tid = f"T{i+1}"
+        ttype = types_cycle[i % len(types_cycle)]
+        start_track = i % max(1, int(num_tracks))
+        goal_track = (start_track + 3) % max(1, int(num_tracks))  # spread directions
+        start = (start_track, 0)
+        goal = (goal_track, max(0, sections_per_track - 1))
+        sched_arrival = i  # stagger by 1 minute
+        dwell = dwell_map[ttype]
+        # Some trains do not require platform access (e.g., through-freight)
+        platform_required = not (random.random() < platform_optional_ratio and ttype in ("Freight", "Express"))
+        trains.append(Train(tid, ttype, PRIORITY_MAP[ttype], start, goal, sched_arrival, dwell, platform_required))
     return trains

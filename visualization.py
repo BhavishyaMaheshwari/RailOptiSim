@@ -128,52 +128,65 @@ def calculate_delays(df):
     return stats
 
 def build_records_from_state(state):
-    """Build DataFrame from simulation state"""
+    """Build DataFrame from simulation state (optimized).
+    - Index log entries per train by slot for O(1) lookup during record build.
+    - Avoid repeated scans per (node,slot) pair.
+    """
     recs = []
+    # Pre-index logs by slot for each train
+    log_index = {}
     for tid, st in state.items():
-        info = st["info"]
-        path = st["planned_path"]
-        slots = st["planned_slots"]
-        pos = st["pos"]
-        status = st["status"]
-        log = st.get("log", [])
-        
+        idx = {}
+        for rec in st.get("log", []):
+            if isinstance(rec, dict):
+                s = rec.get("slot")
+                if s is not None:
+                    idx.setdefault(int(s), []).append(rec)
+            elif isinstance(rec, tuple) and len(rec) >= 2:
+                s = rec[0]
+                idx.setdefault(int(s), []).append({"action": rec[1]})
+        log_index[tid] = idx
+
+    for tid, st in state.items():
+        info = st.get("info")
+        path = st.get("planned_path")
+        slots = st.get("planned_slots")
+        status = st.get("status")
+
         if not path or not slots:
             continue
-            
+
+        idx = log_index.get(tid, {})
         for node, slot in zip(path, slots):
+            slot_i = int(slot)
             action = None
             duration = None
             event_id = None
-            
-            # Handle both dictionary and tuple log entries
-            for log_entry in log:
-                if isinstance(log_entry, dict):
-                    if log_entry.get("slot") == slot:
-                        action = log_entry.get("action")
-                        duration = log_entry.get("duration")
-                        event_id = log_entry.get("event_id")
+            if slot_i in idx:
+                # Prefer dict-form entries if present
+                for entry in idx[slot_i]:
+                    a = entry.get("action")
+                    if a:
+                        action = a
+                        duration = entry.get("duration")
+                        event_id = entry.get("event_id")
                         break
-                elif isinstance(log_entry, tuple) and len(log_entry) >= 2:
-                    if log_entry[0] == slot:
-                        action = log_entry[1]
-                        break
-                    
+
             recs.append({
                 "train": tid,
-                "type": info.type,
-                "priority": info.priority,
+                "type": getattr(info, "type", None),
+                "priority": getattr(info, "priority", None),
                 "node": node,
-                "slot": slot,
+                "slot": slot_i,
                 "status": status,
                 "action": action,
                 "duration": duration,
                 "event_id": event_id
             })
-            
+
     if not recs:
         return pd.DataFrame()
-        
+
     df = pd.DataFrame(recs)
     df = df.sort_values(["train", "slot"])
     return df
@@ -676,7 +689,7 @@ def plot_platform_heatmap(state, platforms, current_slot=None, selected_platform
     )
     return fig
 
-def plot_train_timeline(state, trains, accident_mgr=None):
+def plot_train_timeline(state, trains, accident_mgr=None, current_slot=None):
     """
     Enhanced train position timeline showing section progression over time.
     """
@@ -688,6 +701,8 @@ def plot_train_timeline(state, trains, accident_mgr=None):
     
     num_tracks, num_sections = _infer_dims_from_state(state)
     trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+    # Precompute id -> type map once for efficiency
+    type_map = {t.id: t.type for t in trains}
     
     # Enhanced color palette
     unique_train_colors = [
@@ -703,7 +718,7 @@ def plot_train_timeline(state, trains, accident_mgr=None):
     # Plot each train's journey through sections with richer markers
     for tid in trains_list:
         sub = df[df["train"] == tid]
-        train_type = [t.type for t in trains if t.id == tid][0]
+        train_type = type_map.get(tid, "?")
         
         xs, ys, hover_texts, marker_colors, marker_sizes, marker_symbols = [], [], [], [], [], []
         
@@ -777,27 +792,82 @@ def plot_train_timeline(state, trains, accident_mgr=None):
                 text=hover_texts
             ))
     
+    # Add START/STOP markers per train (clear journey endpoints)
+    def _last_platform_node_from_logs(st):
+        # If at platform now
+        pos = st.get("pos")
+        if isinstance(pos, tuple) and pos and pos[0] == "Platform":
+            return pos
+        # scan logs backwards
+        for rec in reversed(st.get("log", [])):
+            if isinstance(rec, tuple) and len(rec) >= 4:
+                _, prev_node, next_node, action = rec
+                if isinstance(prev_node, tuple) and prev_node and prev_node[0] == "Platform":
+                    return prev_node
+                if isinstance(next_node, tuple) and next_node and next_node[0] == "Platform":
+                    return next_node
+            elif isinstance(rec, dict):
+                node = rec.get("node") or rec.get("to") or rec.get("from")
+                if isinstance(node, tuple) and node and node[0] == "Platform":
+                    return node
+        return None
+
+    for t in trains:
+        st = state.get(t.id, {})
+        # START marker: first 'enter'
+        start_slot = None
+        start_node = None
+        for rec in st.get("log", []):
+            if isinstance(rec, tuple) and len(rec) >= 4 and rec[3] == "enter":
+                start_slot = rec[0]
+                start_node = rec[2]
+                break
+        if start_slot is not None and isinstance(start_node, tuple):
+            y_start = (-0.5 if start_node[0] == "Platform" else start_node[1])
+            fig.add_trace(go.Scatter(
+                x=[start_slot], y=[y_start], mode="markers+text",
+                marker=dict(symbol="triangle-left", size=16, color="#1ABC9C", line=dict(width=1, color="#145A32")),
+                text=[f"{t.id} START"], textposition="top center",
+                name=f"{t.id} START", showlegend=False,
+                hovertemplate=f"{t.id} START at {format_node(start_node)}<br>Slot: {start_slot}<extra></extra>"
+            ))
+        # STOP marker: last platform from logs (depart/completed)
+        stop_node = _last_platform_node_from_logs(st)
+        if stop_node is not None:
+            # find last depart/completed slot
+            stop_slot = None
+            for rec in reversed(st.get("log", [])):
+                if isinstance(rec, tuple) and len(rec) >= 4 and rec[3] in ("depart", "completed"):
+                    stop_slot = rec[0]; break
+                if isinstance(rec, dict) and rec.get("action") in ("depart", "completed"):
+                    stop_slot = rec.get("slot"); break
+            if stop_slot is None:
+                # fallback: use current_slot if completed else last planned slot
+                stop_slot = current_slot if current_slot is not None else 0
+            fig.add_trace(go.Scatter(
+                x=[stop_slot], y=[-0.5], mode="markers+text",
+                marker=dict(symbol="square", size=16, color="#8E44AD", line=dict(width=1, color="#4A235A")),
+                text=[f"{t.id} STOP"], textposition="bottom center",
+                name=f"{t.id} STOP", showlegend=False,
+                hovertemplate=f"{t.id} STOP at {format_node(stop_node)}<br>Slot: {stop_slot}<extra></extra>"
+            ))
+
     # Add accident markers
-    if accident_mgr is not None:
-        all_slots = set(df["slot"].unique()) if not df.empty else set()
-        for slot in sorted(all_slots):
-            actives = accident_mgr.active_summary(slot)
-            for eid, evtype, loc, rem, stats in actives:
-                if isinstance(loc, tuple):
-                    if loc[0] == "Platform":
-                        y = -0.5
-                    else:
-                        y = loc[1]
-                    
-                    fig.add_trace(go.Scatter(
-                        x=[slot], y=[y],
-                        mode="markers+text",
-                        marker=dict(symbol="x", size=20, color="red"),
-                        text=[f"🚨"],
-                        name="Accident",
-                        showlegend=False,
-                        hovertemplate=f"Accident at {format_node(loc)}<br>Slot: {slot}<extra></extra>"
-                    ))
+    if accident_mgr is not None and current_slot is not None:
+        # Mark only currently active incidents to avoid O(T) over all slots
+        actives = accident_mgr.active_summary(current_slot)
+        for eid, evtype, loc, rem, stats in actives:
+            if isinstance(loc, tuple):
+                y = (-0.5 if loc[0] == "Platform" else loc[1])
+                fig.add_trace(go.Scatter(
+                    x=[current_slot], y=[y],
+                    mode="markers+text",
+                    marker=dict(symbol="x", size=20, color="red"),
+                    text=["🚨"],
+                    name="Accident",
+                    showlegend=False,
+                    hovertemplate=f"{evtype.upper()} at {format_node(loc)}<br>Slot: {current_slot}<extra></extra>"
+                ))
     
     fig.update_layout(
         title=dict(
@@ -895,6 +965,7 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
         return fig
 
     trains_list = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+    type_map = {t.id: t.type for t in trains}
     stats = calculate_delays(df)
     
     # Enhanced color palette
@@ -908,56 +979,52 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     
     fig = go.Figure()
     
-    # Create Gantt bars for each train
+    # Create segmented Gantt bars for each train (track vs platform segments)
     for tid in trains_list:
-        sub = df[df["train"] == tid]
-        train_type = [t.type for t in trains if t.id == tid][0]
-        
-        if not sub.empty:
-            start_slot = sub["slot"].min()
-            end_slot = sub["slot"].max()
-            duration = end_slot - start_slot + 1
-            
-            # Determine status and color
-            train_state = state.get(tid, {})
-            status = train_state.get("status", "unknown")
-            delays = stats['delays'][tid]
-            reroutes = stats['reroutes'][tid]
-            
-            if status == "completed":
-                bar_color = color_map[tid]
-                opacity = 1.0
-            elif status == "blocked_by_accident":
-                bar_color = "#DC143C"
-                opacity = 0.8
-            else:
-                bar_color = color_map[tid]
-                opacity = 0.7 if delays > 0 else 1.0
-            
-            # Create hover text
-            hover_text = (
-                f"<b>{tid}</b> ({train_type})<br>"
-                f"Start: Slot {start_slot}<br>"
-                f"End: Slot {end_slot}<br>"
-                f"Duration: {duration} slots<br>"
-                f"Status: {status}<br>"
-                f"Delays: {delays} slots<br>"
-                f"Reroutes: {reroutes}"
-            )
-            
-            fig.add_trace(go.Bar(
-                x=[duration],
-                y=[tid],
-                base=start_slot,
-                orientation='h',
-                marker=dict(
-                    color=bar_color,
-                    opacity=opacity,
-                    line=dict(width=2, color="#2C3E50")
-                ),
-                name=f"{tid} ({train_type})",
-                hovertemplate=hover_text + "<extra></extra>"
-            ))
+        sub = df[df["train"] == tid].sort_values("slot")
+        train_type = type_map.get(tid, "?")
+        if sub.empty:
+            continue
+        train_state = state.get(tid, {})
+        status = train_state.get("status", "unknown")
+        delays = stats['delays'][tid]
+        reroutes = stats['reroutes'][tid]
+
+        # Build contiguous segments by whether on a platform
+        def is_platform(node):
+            return isinstance(node, tuple) and node and node[0] == "Platform"
+
+        slots = sub["slot"].tolist()
+        nodes = sub["node"].tolist()
+        actions = sub["action"].tolist()
+        seg_start = slots[0]
+        seg_on_platform = is_platform(nodes[0])
+        for i in range(1, len(slots) + 1):
+            end_segment = (i == len(slots)) or (is_platform(nodes[i]) != seg_on_platform)
+            if end_segment:
+                seg_end = slots[i-1]
+                duration = seg_end - seg_start + 1
+                bar_color = "#F1C40F" if seg_on_platform else color_map[tid]
+                opacity = 0.9 if seg_on_platform else (0.7 if delays > 0 else 1.0)
+                hover_text = (
+                    f"<b>{tid}</b> ({train_type})<br>"
+                    f"Segment: {'Platform' if seg_on_platform else 'Track'}<br>"
+                    f"Start: Slot {seg_start}<br>"
+                    f"End: Slot {seg_end}<br>"
+                    f"Len: {duration} slots<br>"
+                    f"Status: {status}<br>"
+                    f"Delays(total): {delays} slots | Reroutes: {reroutes}"
+                )
+                fig.add_trace(go.Bar(
+                    x=[duration], y=[tid], base=seg_start, orientation='h',
+                    marker=dict(color=bar_color, opacity=opacity, line=dict(width=1, color="#2C3E50")),
+                    name=f"{tid} ({'Plat' if seg_on_platform else 'Track'})",
+                    hovertemplate=hover_text + "<extra></extra>",
+                    showlegend=False
+                ))
+                if i < len(slots):
+                    seg_start = slots[i]
+                    seg_on_platform = is_platform(nodes[i])
     
     # Add event markers
     for tid in trains_list:
@@ -984,6 +1051,25 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
                         name="Reroute",
                         showlegend=False,
                         hovertemplate=f"<b>{tid}</b> REROUTED at slot {slot}<extra></extra>"
+                    ))
+                elif action == "involved_in_accident":
+                    fig.add_trace(go.Scatter(
+                        x=[slot], y=[tid],
+                        mode="markers+text",
+                        marker=dict(symbol="x", size=18, color="#DC143C"),
+                        text=["✖"],
+                        name="Accident",
+                        showlegend=False,
+                        hovertemplate=f"<b>{tid}</b> ACCIDENT at slot {slot}<extra></extra>"
+                    ))
+                elif action == "affected_by_accident":
+                    fig.add_trace(go.Scatter(
+                        x=[slot], y=[tid],
+                        mode="markers",
+                        marker=dict(symbol="x-thin", size=14, color="#C0392B"),
+                        name="Affected",
+                        showlegend=False,
+                        hovertemplate=f"<b>{tid}</b> AFFECTED at slot {slot}<extra></extra>"
                     ))
                 elif action == "completed":
                     fig.add_trace(go.Scatter(
@@ -1125,6 +1211,98 @@ def plot_station_overview(state, platforms=None, current_slot=None):
     fig.update_xaxes(title_text="Time (slots)", showgrid=True, gridcolor='rgba(128,128,128,0.15)')
     fig.update_yaxes(title_text="Trains", rangemode="tozero")
     
+    return fig
+
+def plot_platform_train_matrix(state, platforms=None, current_slot=None):
+    """Render a Platform × Train matrix showing whether each train uses a platform and when.
+    Cells encode first ETA and occupancy counts across time with color intensity.
+    """
+    import pandas as pd
+    import numpy as np
+    import plotly.graph_objects as go
+    # Build dataframe of platform events
+    rows = []
+    for tid, st in state.items():
+        path = st.get("planned_path", [])
+        slots = st.get("planned_slots", [])
+        for n, s in zip(path, slots):
+            if isinstance(n, tuple) and n and n[0] == "Platform":
+                rows.append({"train": tid, "platform": n, "slot": int(s)})
+    if not rows:
+        fig = go.Figure(); fig.update_layout(title="No platform usage detected"); return fig
+
+    df = pd.DataFrame(rows)
+    # Filter platforms if provided
+    if platforms:
+        sel = set(platforms)
+        df = df[df["platform"].isin(sel)]
+    # If nothing remains (early in sim or filtered away), return a friendly placeholder
+    if df.empty:
+        fig = go.Figure()
+        subtitle = f" — Slot {current_slot}" if current_slot is not None else ""
+        fig.update_layout(
+            title=dict(text=f"🚉 Platform × Train Matrix{subtitle}", x=0.5, font=dict(size=18)),
+            annotations=[dict(text="No platform activity for the current selection yet",
+                              x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False,
+                              font=dict(size=14, color="#7f8c8d"))],
+            height=420, width=1000, plot_bgcolor="#FBFCFC", paper_bgcolor="#FFFFFF"
+        )
+        return fig
+    # Order
+    plat_values = sorted(df["platform"].unique(), key=lambda p: (p[1], p[2]))
+    train_values = sorted(df["train"].unique(), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+
+    # Build matrix: z is min ETA (normalized), with text showing first ETA and total stops count
+    z = []
+    text = []
+    min_slot = int(df["slot"].min())
+    max_slot = int(df["slot"].max())
+    for p in plat_values:
+        z_row = []
+        t_row = []
+        for tid in train_values:
+            sub = df[(df["platform"] == p) & (df["train"] == tid)]
+            if sub.empty:
+                z_row.append(None)
+                t_row.append("")
+            else:
+                first_eta = int(sub["slot"].min())
+                count = int(sub.shape[0])
+                z_val = (first_eta - min_slot) / max(1, (max_slot - min_slot))
+                z_row.append(z_val)
+                t_row.append(f"ETA {first_eta}\n×{count}")
+        z.append(z_row)
+        text.append(t_row)
+
+    fig = go.Figure(data=go.Heatmap(
+        z=z,
+        x=train_values,
+        y=[format_node(p) for p in plat_values],
+        colorscale=[[0, "#E8F8F5"], [0.5, "#A3E4D7"], [1.0, "#1ABC9C"]],
+        colorbar=dict(title="Sooner → Later"),
+        hovertemplate="Platform: %{y}<br>Train: %{x}<br>%{text}<extra></extra>",
+        text=text
+    ))
+
+    # Title + helpful subtitle
+    if current_slot is not None:
+        fig.update_layout(
+            title=dict(text=f"🚉 Platform × Train Matrix — Slot {current_slot}", x=0.5, font=dict(size=18))
+        )
+    else:
+        fig.update_layout(title=dict(text="🚉 Platform × Train Matrix", x=0.5, font=dict(size=18)))
+
+    fig.update_layout(
+        xaxis_title="Trains",
+        yaxis_title="Platforms",
+        height=max(400, 20 * len(plat_values)),
+        width=max(1200, 24 * len(train_values)),
+        plot_bgcolor="#FBFCFC",
+        paper_bgcolor="#FFFFFF",
+    )
+    fig.add_annotation(text="Color = earlier vs later first ETA; blank = no planned stop",
+                       x=1, y=1.08, xref="paper", yref="paper", showarrow=False,
+                       font=dict(size=11, color="#7f8c8d"), xanchor="right")
     return fig
 
 ## Redundant "section vs time" plot removed in favor of Network Map

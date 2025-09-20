@@ -188,8 +188,11 @@ class Simulator:
         return True
 
     def _targets_for_train(self, train_info):
-        # If goal is a platform node, go there; otherwise route to any platform
+        # If platform not required, go to the final section goal; otherwise platforms
         goal = train_info.goal
+        platform_required = getattr(train_info, "platform_required", True)
+        if not platform_required:
+            return {goal}
         if self.is_platform_node(goal):
             return {goal}
         return set(self.platform_nodes)
