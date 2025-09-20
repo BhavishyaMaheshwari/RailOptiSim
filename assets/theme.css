@@ -1,0 +1,185 @@
+/* RailOptimusSim Theme — HSL Design System (maps from provided Tailwind tokens) */
+/* All color variables are defined in HSL and consumed via hsl(var(--token)) */
+
+@font-face {
+  font-family: "InterVar";
+  src: local("Inter"), local("Inter Variable");
+  font-display: swap;
+}
+
+:root {
+  /* Base */
+  --background: 210 20% 98%;
+  --foreground: 215 25% 15%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 215 25% 15%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 25% 15%;
+
+  --primary: 210 80% 35%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 215 25% 25%;
+
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 20% 45%;
+
+  --accent: 210 40% 96%;
+  --accent-foreground: 215 25% 15%;
+
+  --destructive: 0 75% 55%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 210 30% 90%;
+  --input: 210 30% 90%;
+  --ring: 210 80% 35%;
+
+  /* Status */
+  --success: 140 70% 45%;
+  --success-foreground: 0 0% 100%;
+  --warning: 45 95% 55%;
+  --warning-foreground: 0 0% 100%;
+  --danger: 0 75% 55%;
+  --danger-foreground: 0 0% 100%;
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(210 70% 45%));
+  --gradient-surface: linear-gradient(180deg, hsl(var(--background)), hsl(210 30% 95%));
+  --gradient-hero: linear-gradient(135deg, hsl(210 80% 25%), hsl(210 80% 35%));
+
+  /* Shadows */
+  --shadow-soft: 0 2px 8px hsl(210 30% 80% / 0.3);
+  --shadow-medium: 0 4px 16px hsl(210 30% 70% / 0.4);
+  --shadow-strong: 0 8px 32px hsl(210 30% 60% / 0.5);
+
+  /* Navigation */
+  --nav-background: 215 30% 12%;
+  --nav-foreground: 210 20% 85%;
+  --nav-accent: 210 80% 45%;
+  --nav-accent-foreground: 0 0% 100%;
+
+  --radius: 0.5rem;
+
+  --sidebar-background: 0 0% 98%;
+  --sidebar-foreground: 240 5.3% 26.1%;
+  --sidebar-primary: 240 5.9% 10%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 240 4.8% 95.9%;
+  --sidebar-accent-foreground: 240 5.9% 10%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-ring: 217.2 91.2% 59.8%;
+}
+
+/* Dark mode counterpart */
+.dark {
+  --background: 215 30% 8%;
+  --foreground: 210 20% 90%;
+
+  --card: 215 25% 12%;
+  --card-foreground: 210 20% 90%;
+
+  --popover: 215 25% 12%;
+  --popover-foreground: 210 20% 90%;
+
+  --primary: 210 80% 50%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 215 25% 18%;
+  --secondary-foreground: 210 20% 85%;
+
+  --muted: 215 25% 18%;
+  --muted-foreground: 215 15% 65%;
+
+  --accent: 215 25% 18%;
+  --accent-foreground: 210 20% 90%;
+
+  --destructive: 0 75% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 215 25% 18%;
+  --input: 215 25% 18%;
+  --ring: 210 80% 50%;
+
+  --success: 140 60% 50%;
+  --warning: 45 85% 60%;
+  --danger: 0 75% 60%;
+
+  --nav-background: 215 35% 10%;
+  --nav-foreground: 210 20% 85%;
+  --nav-accent: 210 80% 55%;
+  --nav-accent-foreground: 0 0% 100%;
+
+  --sidebar-background: 240 5.9% 10%;
+  --sidebar-foreground: 240 4.8% 95.9%;
+  --sidebar-primary: 224.3 76.3% 48%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 240 3.7% 15.9%;
+  --sidebar-accent-foreground: 240 4.8% 95.9%;
+  --sidebar-border: 240 3.7% 15.9%;
+  --sidebar-ring: 217.2 91.2% 59.8%;
+}
+
+/* Base layout */
+html, body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: InterVar, Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+.app-root {
+  max-width: 1440px;
+}
+
+/* Bootstrap surfaces with theme tokens */
+.card {
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--shadow-soft);
+}
+.card .card-title { font-weight: 700; }
+.card .card-body { padding: 18px 20px; }
+
+/* Buttons */
+.btn { border-radius: 10px !important; font-weight: 600; }
+.btn-primary { background: hsl(var(--primary)) !important; border-color: hsl(var(--primary)) !important; }
+.btn-success { background: hsl(var(--success)) !important; border-color: hsl(var(--success)) !important; }
+.btn-warning { background: hsl(var(--warning)) !important; border-color: hsl(var(--warning)) !important; color: hsl(215 25% 15%) !important; }
+.btn-danger  { background: hsl(var(--danger)) !important; border-color: hsl(var(--danger)) !important; }
+.btn-info    { background: hsl(var(--primary)) !important; border-color: hsl(var(--primary)) !important; }
+.btn:disabled { opacity: 0.6 !important; }
+
+/* Form controls */
+.form-label, .fw-bold { color: hsl(var(--foreground)); }
+.form-control, .form-select {
+  border-color: hsl(var(--input));
+  border-radius: 10px !important;
+}
+
+/* Tables */
+.table thead th {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border-bottom: 1px solid hsl(var(--border));
+}
+.table tbody tr:hover { background: hsl(210 40% 98%); }
+
+/* Alerts */
+.alert-light {
+  background: hsl(210 40% 98%);
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+/* Panel-like logs */
+#accident-log, #ops-log, #now-board, #train-overview {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+}
+
+/* Optional utility */
+.badge { border-radius: 8px !important; font-weight: 700; }

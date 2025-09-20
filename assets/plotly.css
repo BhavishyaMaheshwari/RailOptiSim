@@ -1,0 +1,21 @@
+/* Plotly theming bound to HSL tokens */
+.js-plotly-plot, .plotly, .main-svg {
+  font-family: InterVar, Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
+  color: hsl(var(--foreground));
+}
+
+/* Axis and grid */
+.plotly .xgrid, .plotly .ygrid { stroke: hsl(210 30% 90%) !important; }
+.plotly .xtick text, .plotly .ytick text { fill: hsl(215 25% 25%) !important; }
+
+/* Legends */
+.legend text { fill: hsl(215 25% 25%) !important; }
+
+/* Modebar */
+.modebar { background: transparent !important; box-shadow: none !important; }
+
+/* Hover labels */
+.hoverlayer .hovertext {
+  border-radius: 8px !important;
+  box-shadow: 0 6px 16px hsl(210 30% 70% / 0.35) !important;
+}

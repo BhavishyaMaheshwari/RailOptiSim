@@ -498,10 +498,10 @@ print("Web application initialized with professional styling")
 
 app.layout = dbc.Container([
     html.Div([
-        html.H1("RailOptimusSim — Advanced Railway Control Center", 
+        html.H1("RailOptimus Simulation", 
                 className="text-center mb-4", 
                 style={"color": "#2C3E50", "fontWeight": "bold", "textShadow": "2px 2px 4px rgba(0,0,0,0.1)"}),
-        html.P("Real-time railway traffic simulation with intelligent accident management and dynamic rerouting", 
+        html.P("AI-Powered Railway Simulation with Accident Management, Dynamic Rerouting, and What-If Analysis", 
                className="text-center text-muted mb-4", 
                style={"fontSize": "16px"})
     ]),
@@ -928,7 +928,7 @@ app.layout = dbc.Container([
             })
         ])
     ], className="mt-4"),
-], fluid=True)
+], fluid=True, className="app-root")
 
 # Callback: run/pause with status badge and button states
 @app.callback(
@@ -1273,7 +1273,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
             for p in plats:
                 ev3 = EmergencyEvent(event_id=str(uuid.uuid4())[:8], ev_type="accident", location=p, start_time=sim.current_slot + 4, duration_slots=8, info={"severity": "medium"})
                 acc_mgr.schedule(ev3)
-            status = "🎬 Guided demo queued: breakdown now, track accident in +2, station block in +4."
+            status = "Guided demo queued: breakdown now, track accident in +2, station block in +4."
         except Exception as e:
             status = f"Failed to queue guided demo: {str(e)}"
     elif trig == "unused":
@@ -1513,7 +1513,7 @@ def download_history_list(n_clicks):
 
 if __name__ == "__main__":
     print("\n" + "="*80)
-    print("RAILOPTIMUSSIM - ADVANCED RAILWAY CONTROL CENTER")
+    print("RAILOPTIMUS SIMULATION - ADVANCED RAILWAY CONTROL CENTER")
     print("="*80)
     print("Starting web server...")
     print("Dashboard will be available at: http://127.0.0.1:8050")
