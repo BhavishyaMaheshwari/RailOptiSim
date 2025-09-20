@@ -1,21 +1,3 @@
-"""
-RailOptimusSim - Advanced Railway Traffic Simulation System
-
-This is the main application file for the RailOptimusSim system, providing a comprehensive
-web-based interface for railway traffic simulation with real-time accident management,
-dynamic rerouting, and advanced visualization capabilities.
-
-Features:
-- Real-time railway traffic simulation
-- Interactive accident management
-- Dynamic pathfinding and rerouting
-- Comprehensive visualization suite
-- Professional control interface
-
-Author: RailOptimusSim Development Team
-Version: 2.0 Professional Edition
-"""
-
 import dash
 import ast
 import json
@@ -225,7 +207,6 @@ def generate_ai_summary(state, acc_mgr, platforms, current_slot):
     recent_ops = recent_ops[:5]
 
     return [
-        html.H5("AI Operations Summary"),
         html.Div([
             html.P(f"Current Time: Slot {current_slot} | Platform Efficiency: {platform_efficiency:.1f}"),
             html.P(f"Fleet Status: {completed}/{total} completed, {running} active, {blocked} blocked"),
@@ -503,42 +484,33 @@ app.layout = dbc.Container([
                 style={"color": "#2C3E50", "fontWeight": "bold", "textShadow": "2px 2px 4px rgba(0,0,0,0.1)"}),
         html.P("AI-Powered Railway Simulation with Accident Management, Dynamic Rerouting, and What-If Analysis", 
                className="text-center text-muted mb-4", 
-               style={"fontSize": "16px"})
+               style={"fontSize": "20px"})
     ]),
     
     dbc.Card([
         dbc.CardBody([
                 html.H4("Simulation Overview", className="card-title"),
-             html.P(f"This simulation models 10 trains (Express, Passenger, Freight) on a {NUM_TRACKS}-track network with {SECTIONS} sections per track and {NUM_STATIONS} station × {PLATFORMS_PER_STATION} platforms ({NUM_STATIONS*PLATFORMS_PER_STATION} total), featuring intelligent pathfinding and real-time accident response.", 
+            html.P(f"This simulation models 10 trains (Express, Passenger, Freight) on a {NUM_TRACKS}-track network with {SECTIONS} sections per track and {NUM_STATIONS} station × {PLATFORMS_PER_STATION} platforms. It integrates intelligent, real-time routing and scheduling decisions, dynamically resolving conflicts, optimizing train precedence, and responding to disruptions such as delays or accidents, thereby maximizing section throughput and minimizing overall travel time.", 
                    className="card-text"),
-            html.Hr(),
-            html.H5("Emergency Accident Interface", className="mb-3"),
-            html.P("Use the controls below to trigger emergency scenarios and test the system's response capabilities:", 
-                   style={"fontStyle": "italic", "color": "#7F8C8D"}),
-            html.Ul([
-                html.Li(html.Strong("Track Index (0-7):"), " Select the track where the emergency will occur"),
-                html.Li(html.Strong("Section Index (0-3):"), " Choose the specific section on the selected track"),
-                html.Li(html.Strong("Duration (1-120 slots):"), " Set how long the emergency will last (in minutes)"),
-            ], className="mb-3"),
-         html.P("Click 'Trigger Emergency' to activate the scenario and observe real-time system response.", 
-                   style={"fontStyle": "italic", "color": "#E74C3C", "fontWeight": "bold"}),
+            # Removed inline Emergency Accident Interface section (moved to a dedicated card below)
         ])
     ], className="mb-4"),
+    
     # Removed dataset ingestion UI
     dbc.Card([
         dbc.CardBody([
-            html.H5("One-Click Demos & Presets", className="card-title mb-3"),
+            html.H5("Single-Click Presets", className="card-title mb-3"),
             dbc.Row([
                 dbc.Col([
                     dbc.Label("Preset Scenarios", className="fw-bold"),
                     dcc.Dropdown(
                         id="scenario-preset",
                         options=[
-                            {"label": "Smooth Run (no incidents)", "value": "smooth"},
-                            {"label": "Track Accident at T3-S2 (6m)", "value": "acc_t3s2"},
-                            {"label": "Station 1: Platforms 1-4 blocked (8m)", "value": "st1_pf1_4"},
-                            {"label": "Breakdown: Train T3 (5m)", "value": "bd_t3"},
-                            {"label": "Stress: Mix of all (guided)", "value": "mix"},
+                            {"label": "Smooth Run", "value": "smooth"},
+                            {"label": "Track Accident at T3-S2 (6min)", "value": "acc_t3s2"},
+                            {"label": "Platforms 1-4 blocked at Station 1 (8min)", "value": "st1_pf1_4"},
+                            {"label": "Breakdown: Train T3 (5min)", "value": "bd_t3"},
+                            {"label": "Stress: Mix of all", "value": "mix"},
                             {"label": "Rush Hour Wave", "value": "rush_wave"},
                             {"label": "Platform Wave (P1→P4)", "value": "plat_wave"},
                             {"label": "Clean Recovery", "value": "recovery"},
@@ -548,10 +520,10 @@ app.layout = dbc.Container([
                     )
                 ], width=6),
                 dbc.Col([
-                    dbc.Label("Actions", className="fw-bold"),
+                    dbc.Label(" ", className="fw-bold"),
                     dbc.ButtonGroup([
                         dbc.Button("Apply Preset", id="apply-preset", color="info", className="me-2"),
-                        dbc.Button("Guided Demo", id="guided-demo", color="secondary"),
+                        dbc.Button(" ", id="guided-demo", color=""),
                     ])
                 ], width=6)
             ])
@@ -561,24 +533,39 @@ app.layout = dbc.Container([
         dbc.CardBody([
             html.H5("Simulation Controls", className="card-title mb-3"),
             dbc.Row([
-                dbc.Col(dbc.Button("Step", id="step-btn", color="primary", size="lg", className="me-2"), width="auto"),
-                dbc.Col(dbc.Button("Run", id="run-btn", color="success", size="lg", className="me-2"), width="auto"),
-                dbc.Col(dbc.Button("Pause", id="pause-btn", color="warning", size="lg", className="me-2", disabled=True), width="auto"),
+                dbc.Col(dbc.Button("Step", id="step-btn", color="primary", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Run", id="run-btn", color="success", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Pause", id="pause-btn", color="warning", className="me-2", disabled=True), width="auto"),
                 dbc.Col(html.Span(id="run-status-badge", className="badge bg-secondary align-self-center", children="Idle"), width="auto"),
-                dbc.Col(dbc.Button("Reset", id="reset-btn", color="danger", size="lg", className="me-2"), width="auto"),
+                dbc.Col(dbc.Button("Reset", id="reset-btn", color="danger", className="me-2"), width="auto"),
             ], className="mb-3"),
             dbc.Row([
                 dbc.Col([
                     dbc.Label("Speed (Run mode)", className="fw-bold"),
                     dcc.Slider(
                         id="sim-speed",
-                        min=0.25, max=4.0, step=None, value=1.0,
-                        marks={0.25: "0.25×", 0.5: "0.5×", 1.0: "1×", 2.0: "2×", 4.0: "4×"}
+                        min=0.25, max=4.0, step=0.25, value=1.0,
+                        marks={0.25: "0.25x", 0.5: "0.5x", 1.0: "1x", 2.0: "2x", 4.0: "4x"}
                     )
                 ])
             ], className="mb-2"),
             html.Small("Use these controls to manage the simulation: Step for manual progression, Run for continuous operation, Pause to stop, and Reset to restart.", 
                       className="text-muted")
+        ])
+    ], className="mb-4"),
+    # Emergency Accident Interface card placed exactly above the Emergency Scenario Trigger card
+    dbc.Card([
+        dbc.CardBody([
+            html.H5("Emergency Accident Interface", className="mb-3"),
+            html.P("Use the controls below to trigger emergency scenarios and test the system's response capabilities:",
+                   style={"fontStyle": "italic", "color": "#7F8C8D"}),
+            html.Ul([
+                html.Li(html.Strong("Track Index (0-5): Select the track where the emergency will occur"), " Select the track where the emergency will occur"),
+                html.Li(html.Strong("Section Index (0-3): Select the specific section on the selected track"), " Select the specific section on the selected track"),
+                html.Li(html.Strong("Duration (1-120 slots): Set how long the emergency will last (in minutes)"), " Set how long the emergency will last (in minutes)"),
+            ], className="mb-3"),
+            html.P("Click 'Trigger Emergency' to activate the scenario and observe real-time system response.",
+                   style={"fontStyle": "italic", "color": "#E74C3C", "fontWeight": "bold"}),
         ])
     ], className="mb-4"),
     dbc.Card([
@@ -622,7 +609,7 @@ app.layout = dbc.Container([
                 dcc.Tab(label="Platform(s)", value="platforms", children=[
                     dbc.Row([
                         dbc.Col([
-                            dbc.Label("Select Platforms", className="fw-bold"),
+                            dbc.Label("Select Platform", className="fw-bold"),
                             dcc.Dropdown(
                                 id="platform-acc-platforms",
                                 options=[{"label": format_node(p), "value": str(p)} for p in PLATFORMS],
@@ -676,7 +663,7 @@ app.layout = dbc.Container([
                     ], className="align-items-end mt-2"),
                 ]),
             ]),
-            html.Small("Configure emergency parameters and click to activate. The system will automatically detect affected trains and initiate rerouting procedures.", 
+            html.Small(" ", 
                       className="text-muted mt-2 d-block")
         ])
     ], className="mb-4"),
@@ -702,18 +689,7 @@ app.layout = dbc.Container([
                         placeholder="Select platforms (optional)"
                     )
                 ], width=5),
-                dbc.Col([
-                    dbc.Label("Platform View", className="fw-bold"),
-                    dcc.RadioItems(
-                        id="platform-view-mode",
-                        options=[
-                            {"label": "Scatter (Platform × Train)", "value": "scatter"},
-                            {"label": "Combined (stacked)", "value": "combined"},
-                        ],
-                        value="scatter",
-                        labelStyle={"display": "block"}
-                    )
-                ], width=3)
+                # Removed Platform View (scatter) control
             ], className="mb-3"),
             dbc.Row([
                 dbc.Col([
@@ -734,38 +710,49 @@ app.layout = dbc.Container([
                 ], width="auto"),
                 dbc.Col([
                     dbc.Checklist(
-                        options=[{"label": " Dark Theme", "value": "dark"}],
+                        options=[{"label": " ", "value": "dark"}],
                         value=[],
                         id="dark-mode",
-                        switch=True,
+                        switch=False,
                     )
-                ], width="auto"),
+                ], width="0"),
             ])
         ])
     ], className="mb-3"),
-
-    # Marker legend
-    dbc.Alert([
-        html.Span("Legend: "),
-        html.Span("Arrive ▲ ", style={"color": "#FFD700", "fontWeight": "bold"}),
-        html.Span("Depart ▼ ", style={"color": "#32CD32", "fontWeight": "bold"}),
-        html.Span("Reroute ◆ ", style={"color": "#FF8C00", "fontWeight": "bold"}),
-        html.Span("Accident ✖ ", style={"color": "#DC143C", "fontWeight": "bold"}),
-        html.Span("Resume ★", style={"color": "#00FF7F", "fontWeight": "bold"})
-    ], color="light", className="mb-3"),
 
     dcc.Graph(id="network-map-graph", config={
         "displaylogo": False,
         "toImageButtonOptions": {"format": "png", "scale": 3},
         "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
     }),
-    # KPI badges row (throughput & delays)
-    dbc.Row([
-        dbc.Col(html.Div(id="kpi-throughput", className="badge bg-success p-2 me-2"), width="auto"),
-        dbc.Col(html.Div(id="kpi-total-delay", className="badge bg-warning text-dark p-2 me-2"), width="auto"),
-        dbc.Col(html.Div(id="kpi-avg-delay", className="badge bg-info text-dark p-2 me-2"), width="auto"),
-        dbc.Col(html.Div(id="kpi-platform-util", className="badge bg-secondary p-2"), width="auto"),
-    ], className="my-2"),
+    # KPIs (Improved) — card directly below the network map
+    dbc.Card([
+        dbc.CardBody([
+            html.H3("Improved KPIs:", className="card-title mb-3"),
+            dbc.Row([
+                dbc.Col(
+                    dbc.Button(id="kpi-throughput", color="success",
+                               className="w-100 py-4 fs-10 shadow-sm rounded-3",
+                               style={"fontSize": "24px"}), width=6
+                ),
+                dbc.Col(
+                    dbc.Button(id="kpi-total-delay", color="warning",
+                               className="w-100 py-4 fs-10 shadow-sm text-dark rounded-3",
+                               style={"fontSize": "24px"}), width=6
+                ),
+                dbc.Col(
+                    dbc.Button(id="kpi-avg-delay", color="info",
+                               className="w-100 py-4 fs-10 shadow-sm text-dark rounded-3",
+                               style={"fontSize": "24px"}), width=6
+                ),
+                dbc.Col(
+                    dbc.Button(id="kpi-platform-util", color="secondary",
+                               className="w-100 py-4 fs-10 shadow-sm rounded-3",
+                               style={"fontSize": "24px"}), width=6
+                ),
+            ], className="g-3")
+        ])
+    ], className="my-3"),
     dcc.Graph(id="timeline-graph", config={
         "displaylogo": False,
         "toImageButtonOptions": {"format": "png", "scale": 3},
@@ -776,16 +763,7 @@ app.layout = dbc.Container([
         "toImageButtonOptions": {"format": "png", "scale": 3},
         "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
     }),
-    dcc.Graph(id="station-graph", config={
-        "displaylogo": False,
-        "toImageButtonOptions": {"format": "png", "scale": 3},
-        "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
-    }),
-    dcc.Graph(id="platform-train-scatter", config={
-        "displaylogo": False,
-        "toImageButtonOptions": {"format": "png", "scale": 3},
-        "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
-    }),
+    # Removed station graph (Next Planned Stop scatter)
     # Human-friendly alternatives
     dcc.Graph(id="stops-graph", config={
         "displaylogo": False,
@@ -810,26 +788,14 @@ app.layout = dbc.Container([
             dcc.Download(id="download-history-list")
         ])
     ], className="mt-3"),
-    # Removed geographic corridor graph
-    dbc.Card([
-        dbc.CardBody([
-            html.H5("What am I looking at? (Network Map)", className="card-title mb-2"),
-            html.Ul([
-                html.Li("The long grey lines are tracks — like roads for trains."),
-                html.Li("Yellow dots are platforms — the places where trains stop. They’re grouped into one zone: Station 1."),
-                html.Li("Each train is shown with a colored path indicating its next moves."),
-                html.Li("Curved connectors show where a train can change tracks or enter a platform."),
-                html.Li("A red X mark means an emergency (that part of the track or a platform is blocked for a while)."),
-            ], style={"marginBottom": 0})
-        ])
-    ], className="mb-4"),
+    # Removed geographic corridor graph (help card removed on request)
     dbc.Row([
         dbc.Col([
             dbc.Card([
                 dbc.CardHeader(html.H4("Emergency Event Log", className="mb-0", style={"color": "#E74C3C"})),
                 dbc.CardBody([
                     html.Div(id="accident-log", style={
-                        "height": "350px", 
+                        "height": "643px", 
                         "overflow-y": "auto", 
                         "border": "2px solid #E74C3C", 
                         "padding": "15px",
@@ -845,7 +811,8 @@ app.layout = dbc.Container([
                 dbc.CardHeader(html.H4("System Performance Dashboard", className="mb-0", style={"color": "#27AE60"})),
                 dbc.CardBody([
                     html.Div(id="system-stats", style={
-                        "height": "350px", 
+                        "height": "643px", 
+                        "overflow-y": "auto",
                         "border": "2px solid #27AE60", 
                         "padding": "15px",
                         "background-color": "#F0F9F0",
@@ -907,7 +874,7 @@ app.layout = dbc.Container([
     # Removed dataset-loaded store
     dbc.Card([
         dbc.CardBody([
-            html.H5("Plain English Summary", className="card-title mb-3"),
+            html.H5("Simplified Operations Summary", className="card-title mb-3"),
             html.Div(id="plain-summary", style={"fontFamily": "Arial, sans-serif", "fontSize": "14px"})
         ])
     ], className="mt-3"),
@@ -958,9 +925,7 @@ def run_pause(run_clicks, pause_clicks, running):
 @app.callback(
     Output("timeline-graph", "figure"),
     Output("gantt-graph", "figure"),
-    Output("station-graph", "figure"),
     Output("stops-graph", "figure"),
-    Output("platform-train-scatter", "figure"),
     Output("network-map-graph", "figure"),
     Output("kpi-throughput", "children"),
     Output("kpi-total-delay", "children"),
@@ -986,7 +951,7 @@ def run_pause(run_clicks, pause_clicks, running):
     Input("guided-demo", "n_clicks"),
     Input("train-filter", "value"),
     Input("platform-filter", "value"),
-    Input("platform-view-mode", "value"),
+    # Removed platform-view-mode input
     Input("hd-mode", "value"),
     Input("dark-mode", "value"),
     Input("simple-mode", "value"),
@@ -1003,7 +968,7 @@ def run_pause(run_clicks, pause_clicks, running):
     State("breakdown-duration", "value"),
     State("scenario-preset", "value"),
 )
-def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, trigger_breakdown_clicks, reset_clicks, apply_preset_clicks, guided_demo_clicks, train_filter, platform_filter, platform_view, hd_mode, dark_mode, simple_mode, acc_track, acc_section, acc_duration, acc_severity, acc_delay, platform_nodes, platform_acc_duration, platform_acc_severity, platform_acc_delay, breakdown_train, breakdown_duration, scenario_value):
+def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, trigger_breakdown_clicks, reset_clicks, apply_preset_clicks, guided_demo_clicks, train_filter, platform_filter, hd_mode, dark_mode, simple_mode, acc_track, acc_section, acc_duration, acc_severity, acc_delay, platform_nodes, platform_acc_duration, platform_acc_severity, platform_acc_delay, breakdown_train, breakdown_duration, scenario_value):
     global G, PLATFORMS, trains, acc_mgr, sim, GEO_PATH, STATION_POSITIONS, CURRENT_SECTIONS
     ctx = dash.callback_context
     trig = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
@@ -1323,17 +1288,7 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
     # Human friendly: Stops Comparator (expected vs actual)
     stops_fig = plot_stops_schedule(filtered_state, platforms=selected_platforms, current_slot=sim.current_slot)
 
-    if platform_view == "grid":
-        from visualization import plot_station_overview
-        station_fig = plot_station_overview(filtered_state, platforms=selected_platforms, current_slot=sim.current_slot)
-    elif platform_view == "combined":
-        from visualization import plot_station_overview_combined
-        station_fig = plot_station_overview_combined(filtered_state, selected_platforms, current_slot=sim.current_slot)
-    else:
-        # Default: scatter view
-        from visualization import plot_platform_train_scatter
-        station_fig = plot_platform_train_scatter(filtered_state, platforms=(selected_platforms or PLATFORMS), current_slot=sim.current_slot)
-        plat_train_scatter_fig = station_fig
+    # Removed station view selection and scatter plot entirely
 
     # Network map view
     network_fig = plot_network_map(G, filtered_state, PLATFORMS, current_slot=sim.current_slot, accident_mgr=acc_mgr)
@@ -1344,17 +1299,32 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
     if scale != 1.0:
         timeline_fig = enhance_for_hd(timeline_fig, scale=scale)
         gantt_fig = enhance_for_hd(gantt_fig, scale=scale)
-        station_fig = enhance_for_hd(station_fig, scale=scale)
         stops_fig = enhance_for_hd(stops_fig, scale=scale)
         network_fig = enhance_for_hd(network_fig, scale=scale)
 
     # Dark theme toggle
     if isinstance(dark_mode, list) and "dark" in dark_mode:
-        for f in (timeline_fig, gantt_fig, station_fig, stops_fig, network_fig):
+        for f in (timeline_fig, gantt_fig, stops_fig, network_fig):
             try:
                 f.update_layout(template="plotly_dark")
             except Exception:
                 pass
+
+    # Enforce uniform title font size across primary graphs (preserve bold in text)
+    try:
+        uniform_title_size = 24  # px
+        for f in (timeline_fig, gantt_fig, stops_fig, network_fig):
+            try:
+                # Preserve existing title text and position; only set font size
+                current = f.layout.title
+                if current and hasattr(current, "text"):
+                    f.update_layout(title=dict(text=current.text, x=current.x if hasattr(current, "x") and current.x is not None else 0.5, font=dict(size=uniform_title_size)))
+                else:
+                    f.update_layout(title=dict(font=dict(size=uniform_title_size)))
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # Panels
     accident_log = generate_accident_log(acc_mgr, sim.current_slot)
@@ -1418,7 +1388,26 @@ def control(step_clicks, n_intervals, trigger_clicks, trigger_platform_clicks, t
     else:
         kpi_util = "Platform Util: 0% | Busiest: N/A"
 
-    return timeline_fig, gantt_fig, station_fig, stops_fig, plat_train_scatter_fig, network_fig, kpi_throughput, kpi_total, kpi_avg, kpi_util, timeline_style, status, accident_log, system_stats, train_overview, ai_summary, ops_log, plain, now_board, history_fig
+    return (
+        timeline_fig,
+        gantt_fig,
+        stops_fig,
+        network_fig,
+        kpi_throughput,
+        kpi_total,
+        kpi_avg,
+        kpi_util,
+        timeline_style,
+        status,
+        accident_log,
+        system_stats,
+        train_overview,
+        ai_summary,
+        ops_log,
+        plain,
+        now_board,
+        history_fig,
+    )
 
 # Removed dataset-related callbacks and dynamic section max
 

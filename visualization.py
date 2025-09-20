@@ -383,12 +383,12 @@ def plot_track_timeline(state, trains, accident_mgr=None, current_slot=None):
     
     fig.update_layout(
         title=dict(
-            text=f"RAILWAY TRACK TIMELINE | Current: Slot {current_slot} | Completed: {completed_trains} | Blocked: {blocked_trains} | Running: {running_trains}",
+            text=f"<b>Railway Track Timeline</b> | Current Time Slot: {current_slot} | Completed: {completed_trains} | Blocked: {blocked_trains} | Running: {running_trains}",
             x=0.5,
             font=dict(size=16)
         ),
         xaxis=dict(
-            title="Time (slots)",
+            title="Time Slots",
             showgrid=True,
             gridcolor='rgba(128,128,128,0.2)'
         ),
@@ -619,7 +619,7 @@ def plot_network_map(G, state, platforms, current_slot=None, accident_mgr=None, 
 
     # Layout styling
     fig.update_layout(
-        title=dict(text=f"Network Map — live paths{' | Slot ' + str(current_slot) if current_slot is not None else ''}", x=0.5, font=dict(size=18)),
+        title=dict(text=f"<b>Network Map</b> {' | Time Slot: ' + str(current_slot) if current_slot is not None else ''}", x=0.5, font=dict(size=18)),
         xaxis=dict(visible=False), yaxis=dict(visible=False),
         height=600, width=1400, showlegend=True,
         margin=dict(l=40, r=40, t=60, b=40),
@@ -1102,12 +1102,12 @@ def plot_gantt_chart(state, trains, accident_mgr=None, current_slot=None):
     
     fig.update_layout(
         title=dict(
-            text=f"Railway Journey Gantt Chart<br>Completed: {completed_trains}/{len(trains_list)} | Total delays: {total_delays} slots | Reroutes: {total_reroutes}",
+            text=f"<b>Railway Journey Gantt Chart</b><br>Completed: {completed_trains}/{len(trains_list)} | Total delays: {total_delays} slots | Reroutes: {total_reroutes}",
             x=0.5,
             font=dict(size=16)
         ),
         xaxis=dict(
-            title="Time (slots)",
+            title="Time Slots",
             showgrid=True,
             gridcolor='rgba(128,128,128,0.2)'
         ),
@@ -1348,15 +1348,15 @@ def plot_platform_train_scatter(state, platforms=None, current_slot=None):
         marker=dict(size=12, color=cs, colorscale=[[0, "#E8F8F5"], [0.5, "#A3E4D7"], [1.0, "#1ABC9C"]], line=dict(color="#2C3E50", width=1)),
         text=texts, hovertemplate="Train: %{x}<br>Platform: %{y}<br>%{text}<extra></extra>"
     ))
-    subtitle = f" — Now at slot {current_slot}" if current_slot is not None else ""
+    subtitle = f" Current time slot: {current_slot}" if current_slot is not None else ""
     fig.update_layout(
-        title=dict(text=f"Platform × Train — first planned stops{subtitle}", x=0.5),
+        title=dict(text=f"<b>Next Planned Stop: Train → Platform </b> | {subtitle}", x=0.5),
         xaxis_title="Trains",
         yaxis_title="Platforms",
         height=max(400, 20 * len(plats)), width=max(1200, 24 * len(trains)),
         plot_bgcolor="#FBFCFC", paper_bgcolor="#FFFFFF"
     )
-    fig.add_annotation(text="Each dot = the train's first planned platform stop. Lighter = sooner; darker = later.",
+    fig.add_annotation(text="Each dot = the train's next/first planned platform stop. Lighter = sooner; darker = later.",
                        x=1, y=1.08, xref="paper", yref="paper", showarrow=False,
                        font=dict(size=11, color="#7f8c8d"), xanchor="right")
     return fig
@@ -1470,8 +1470,8 @@ def plot_stops_schedule(state, platforms=None, current_slot=None):
             ))
 
     fig.update_layout(
-        title=dict(text="Stops Comparator — Expected vs Actual", x=0.5, font=dict(size=16)),
-        xaxis_title="Time (slots)",
+        title=dict(text="<b> Stops Comparator — Expected vs Actual </b>", x=0.5, font=dict(size=16)),
+        xaxis_title="Time Slots",
         yaxis=dict(title="Trains", categoryorder="array", categoryarray=y_order),
         height=max(400, 30 * len(y_order)),
         width=1400,
